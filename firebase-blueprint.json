@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BudgetAppFirebaseBlueprint",
+  "entities": {
+    "User": {
+      "collection": "users",
+      "fields": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "BudgetData": {
+      "collection": "users/{userId}/budgetData",
+      "fields": {
+        "userId": { "type": "string" },
+        "currentSalary": { "type": "number" },
+        "safetyCushionDeposit": { "type": "number" },
+        "cushionTargetAmount": { "type": "number" },
+        "cushionAccumulated": { "type": "number" },
+        "total30DaysBudget": { "type": "number" },
+        "days": { "type": "array" },
+        "plannedItems": { "type": "array" },
+        "wishlist": { "type": "array" },
+        "mandatoryExpenses": { "type": "array" },
+        "cushionSchedule": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      }
+    }
+  },
+  "securityRules": {
+    "users/{userId}": {
+      "read": "request.auth != null && request.auth.uid == userId",
+      "write": "request.auth != null && request.auth.uid == userId"
+    },
+    "users/{userId}/budgetData/{docId}": {
+      "read": "request.auth != null && request.auth.uid == userId",
+      "write": "request.auth != null && request.auth.uid == userId"
+    }
+  }
+}

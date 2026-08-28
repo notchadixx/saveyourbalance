@@ -1,0 +1,189 @@
+@import "tailwindcss";
+
+@layer base {
+  :root, [data-theme="light"] {
+    --color-bg-app: #f8f9fa;
+    --color-bg-card: #ffffff;
+    --color-bg-card-subtle: #f3f4f5;
+    --color-bg-card-muted: #edeeef;
+    --color-bg-header: #f8f9fa;
+    --color-bg-nav: rgba(248, 249, 250, 0.95);
+    --color-border: #e1e3e4;
+    --color-border-subtle: #edeeef;
+    --color-border-strong: #c4c6cd;
+    --color-text-main: #041627;
+    --color-text-body: #191c1d;
+    --color-text-muted: #74777d;
+    --color-text-secondary: #44474c;
+    --color-primary-btn: #041627;
+    --color-primary-btn-hover: #1a2b3c;
+    --color-primary-btn-text: #ffffff;
+    --color-accent: #006d37;
+    --color-accent-hover: #005228;
+    --color-accent-light: #6bfe9c;
+    --color-accent-badge-bg: rgba(107, 254, 156, 0.25);
+    --color-accent-badge-text: #00743a;
+    --color-accent-badge-border: rgba(107, 254, 156, 0.4);
+    --color-danger: #ba1a1a;
+    --color-danger-bg: rgba(186, 26, 26, 0.1);
+    --color-input-bg: #ffffff;
+    --color-input-border: #c4c6cd;
+    --color-device-frame: #041627;
+    --color-device-bezel: #1e293b;
+    --color-device-topbar: #f8f9fa;
+    --color-modal-bg: #ffffff;
+    --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  }
+
+  [data-theme="dark"], .dark {
+    --color-bg-app: #0b131f;
+    --color-bg-card: #121f2f;
+    --color-bg-card-subtle: #18283d;
+    --color-bg-card-muted: #152233;
+    --color-bg-header: #0e1826;
+    --color-bg-nav: rgba(14, 24, 38, 0.95);
+    --color-border: #22354c;
+    --color-border-subtle: #19293e;
+    --color-border-strong: #324a66;
+    --color-text-main: #f1f5f9;
+    --color-text-body: #e2e8f0;
+    --color-text-muted: #94a3b8;
+    --color-text-secondary: #cbd5e1;
+    --color-primary-btn: #10b981;
+    --color-primary-btn-hover: #059669;
+    --color-primary-btn-text: #041627;
+    --color-accent: #34d399;
+    --color-accent-hover: #6ee7b7;
+    --color-accent-light: #34d399;
+    --color-accent-badge-bg: rgba(52, 211, 153, 0.16);
+    --color-accent-badge-text: #34d399;
+    --color-accent-badge-border: rgba(52, 211, 153, 0.35);
+    --color-danger: #f87171;
+    --color-danger-bg: rgba(248, 113, 113, 0.16);
+    --color-input-bg: #152438;
+    --color-input-border: #2c425c;
+    --color-device-frame: #03080f;
+    --color-device-bezel: #0f172a;
+    --color-device-topbar: #0e1826;
+    --color-modal-bg: #121f2f;
+    --shadow-card: 0 4px 16px 0 rgba(0, 0, 0, 0.35);
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--color-bg-app);
+    color: var(--color-text-body);
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* Hide scrollbar for horizontal date pickers */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Semantic utility classes driven by CSS variables */
+.theme-bg-app {
+  background-color: var(--color-bg-app);
+}
+
+.theme-bg-card {
+  background-color: var(--color-bg-card);
+}
+
+.theme-bg-card-subtle {
+  background-color: var(--color-bg-card-subtle);
+}
+
+.theme-bg-card-muted {
+  background-color: var(--color-bg-card-muted);
+}
+
+.theme-bg-header {
+  background-color: var(--color-bg-header);
+}
+
+.theme-bg-nav {
+  background-color: var(--color-bg-nav);
+}
+
+.theme-border {
+  border-color: var(--color-border);
+}
+
+.theme-border-subtle {
+  border-color: var(--color-border-subtle);
+}
+
+.theme-border-strong {
+  border-color: var(--color-border-strong);
+}
+
+.theme-text-main {
+  color: var(--color-text-main);
+}
+
+.theme-text-body {
+  color: var(--color-text-body);
+}
+
+.theme-text-muted {
+  color: var(--color-text-muted);
+}
+
+.theme-text-secondary {
+  color: var(--color-text-secondary);
+}
+
+.theme-text-accent {
+  color: var(--color-accent);
+}
+
+.theme-bg-accent-badge {
+  background-color: var(--color-accent-badge-bg);
+}
+
+.theme-text-accent-badge {
+  color: var(--color-accent-badge-text);
+}
+
+.theme-border-accent-badge {
+  border-color: var(--color-accent-badge-border);
+}
+
+.theme-text-danger {
+  color: var(--color-danger);
+}
+
+.theme-bg-danger-soft {
+  background-color: var(--color-danger-bg);
+}
+
+.theme-bg-input {
+  background-color: var(--color-input-bg);
+}
+
+.theme-border-input {
+  border-color: var(--color-input-border);
+}
