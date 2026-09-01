@@ -52,7 +52,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div 
-        className="bg-[var(--color-bg-card)] w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl border border-[var(--color-border)] animate-in fade-in slide-in-from-bottom-6 duration-200"
+        className="bg-[var(--color-bg-card)] w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl border border-[var(--color-border)] animate-in fade-in slide-in-from-bottom-6 duration-200 max-h-[92vh] overflow-y-auto flex flex-col"
       >
         <div className="flex justify-between items-center pb-3 border-b border-[var(--color-border)]">
           <h3 className="text-base font-bold text-[var(--color-text-main)]">

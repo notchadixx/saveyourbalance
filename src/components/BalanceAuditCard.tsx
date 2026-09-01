@@ -143,7 +143,7 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
               : (currentSavedCorrection > 0 ? formatRubles(currentSavedCorrection, { showCents: false }) : '0 ₽')}
           </div>
           <span className="text-[11px] text-[var(--color-text-muted)] font-medium">
-            {hasDiscrepancy ? 'Требуется синхронизация с банком' : 'Расхождений с картами нет'}
+            {hasDiscrepancy ? 'Требуется синхронизация с балансом карты' : 'Расхождений с картами нет'}
           </span>
         </div>
 
@@ -155,25 +155,26 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
         )}
       </div>
 
-      {/* 4. Notification Banner (shown ONLY when there is a discrepancy) */}
-      <AnimatePresence>
-        {hasDiscrepancy && (
+      {/* 4. Notification Banner: Discrepancy Alert OR 'Расхождений не выявлено' */}
+      <AnimatePresence mode="wait">
+        {hasDiscrepancy ? (
           <motion.div
+            key="discrepancy-banner"
             initial={{ opacity: 0, height: 0, marginTop: 0 }}
             animate={{ opacity: 1, height: 'auto', marginTop: 4 }}
             exit={{ opacity: 0, height: 0, marginTop: 0 }}
             transition={{ duration: 0.2 }}
             className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 overflow-hidden"
           >
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-4 h-4" />
               </div>
               <div className="min-w-0">
                 <span className="text-xs font-bold text-[var(--color-text-main)] block truncate">
-                  Замечено расхождение с балансом карты
+                  Выявлено расхождение с балансом карты
                 </span>
-                <span className="text-[11px] text-[var(--color-text-muted)] block">
+                <span className="text-[11px] text-[var(--color-text-muted)] block truncate">
                   Разница: {formatRubles(absCorrection)}
                 </span>
               </div>
@@ -182,11 +183,38 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
             <button
               type="button"
               onClick={handleSync}
-              className="py-2 px-3.5 rounded-xl bg-[#006d37] dark:bg-[#10b981] hover:bg-[#005228] dark:hover:bg-[#059669] text-white dark:text-[#041627] font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0"
+              className="py-2 px-3.5 rounded-xl bg-[#006d37] dark:bg-[#10b981] hover:bg-[#005228] dark:hover:bg-[#059669] text-white dark:text-[#041627] font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Синхронизировать</span>
             </button>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="synced-banner"
+            initial={{ opacity: 0, height: 0, marginTop: 0 }}
+            animate={{ opacity: 1, height: 'auto', marginTop: 4 }}
+            exit={{ opacity: 0, height: 0, marginTop: 0 }}
+            transition={{ duration: 0.2 }}
+            className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between gap-2 overflow-hidden"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 block truncate">
+                  Расхождений не выявлено
+                </span>
+                <span className="text-[11px] text-[var(--color-text-muted)] block truncate">
+                  Чистый остаток соответствует балансу по карте
+                </span>
+              </div>
+            </div>
+
+            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-2.5 py-1 rounded-full whitespace-nowrap shrink-0">
+              В балансе
+            </span>
           </motion.div>
         )}
       </AnimatePresence>

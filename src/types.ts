@@ -50,6 +50,7 @@ export interface PlannedItem {
   isPaid: boolean;
   notes?: string;
   plannedAmountAlt?: number; // e.g. 18000 / 12000
+  period?: 'current' | 'next' | 'advance_period' | 'salary_period' | string; // Перенос на другой период
 }
 
 export interface WishlistItem {
@@ -63,6 +64,7 @@ export interface WishlistItem {
   priority: 'high' | 'medium' | 'low';
   category?: string;
   notes?: string;
+  targetMonth?: string;
 }
 
 export interface CushionMonthPlan {
@@ -82,6 +84,7 @@ export interface MandatoryExpense {
   title: string;
   amount: number;
   category: string;
+  isAutoCalculated?: boolean;
 }
 
 // ==========================================
@@ -118,26 +121,50 @@ export interface BankTransaction {
   date: string; // 'YYYY-MM-DD'
   time: string; // 'HH:mm'
   status: 'pending' | 'approved' | 'rejected';
+  isIncomeConfirmed?: boolean;
   rawSnippet?: string;
+}
+
+export type IncomeSourceType = 'bank_card' | 'cash' | 'transfer' | 'freelance' | 'bonus' | 'gift' | 'debt_return' | 'sale' | 'other';
+
+export interface IncomeItem {
+  id: string;
+  title: string;
+  amount: number;
+  date: string; // 'YYYY-MM-DD'
+  time?: string; // 'HH:mm'
+  sourceType: IncomeSourceType;
+  sourceName?: string; // "Т-Банк •4821", "Наличные", "СБП Перевод"
+  category: string; // "Зарплата", "Аванс", "Перевод", "Наличные", "Кэшбэк", "Подработка", "Премия", "Возврат долга", "Продажа", "Подарок", "Прочее"
+  isIncludedInBudget: boolean; // Включено ли в текущий расчет 30-дневного бюджета
+  isManual: boolean; // Добавлено вручную пользователем
+  bankTransactionId?: string; // Если создано на основе банковской входящей транзакции
+  notes?: string;
+  createdAt: string;
 }
 
 export interface BudgetState {
   periodTitle: string; // "05.08.2026 — 04.09.2026"
   periodStartDate: string; // "2026-08-05"
   periodEndDate: string; // "2026-09-04"
-  todayDate: string; // "2026-08-26"
+  todayDate: string; // "2026-08-28"
   
   // Advance and salary timeline
   salaryDateDay: number; // 5 (5th of month)
   advanceDateDay: number; // 20 (20th of month)
   advancePaymentDate: string; // "2026-08-20"
   estimatedAdvanceAmount: number; // 40 000.00 (estimated advance payment)
+  isAdvanceReceived?: boolean; // Получен ли уже аванс в текущем периоде
   
   // High-level budget
   total30DaysBudget: number; // 135 789.69
   previousMonthRemainder: number; // 11 803.76
   safetyCushionDeposit: number; // 8 265.00
   currentSalary: number; // 82 650.00
+  
+  // Balance sync state
+  isBalanceSynced?: boolean;
+  lastBalanceSyncDate?: string;
   
   // Planned items
   plannedItems: PlannedItem[];
@@ -149,16 +176,27 @@ export interface BudgetState {
   wishlist: WishlistItem[];
   
   // Safety cushion
-  cushionAccumulated: number; // 8 269.53
+  cushionAccumulated: number; // 8 269.53 (на счетах / вкладах)
+  cushionCash: number; // Наличные сбережения
   cushionTargetAmount: number; // 163 294.11
   cushionTargetMonthsCount: number; // 3
+  cushionMonthlyContribution: number; // Ежемесячное пополнение
   mandatoryExpenses: MandatoryExpense[];
+  mandatoryExpensesMode?: 'manual' | 'auto';
   cushionSchedule: CushionMonthPlan[];
+  isCushionDepositDoneThisMonth?: boolean; // Были ли совершен взнос в текущем месяце (август 2026)
+  actualCushionDepositThisMonth?: number; // Сумма совершенного взноса (8 265.00)
+  cushionNormMode?: 'percent' | 'fixed'; // Способ расчета нормы: процент от з/п или фиксированная сумма
+  cushionNormPercent?: number; // Процент нормы (рекомендация: 10%)
+  cushionNormFixedAmount?: number; // Фиксированная сумма нормы
   
   // Banking integration state
   bankAccounts: BankAccount[];
   pendingBankTransactions: BankTransaction[];
   lastBankSyncTimestamp?: string;
+  
+  // Income & additional inflows (card receipts, cash, freelance, gifts)
+  incomes: IncomeItem[];
   
   // View mode
   isMobileFrame: boolean;

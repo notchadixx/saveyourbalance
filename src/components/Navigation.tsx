@@ -57,7 +57,7 @@ export const TopBar: React.FC<NavigationProps> = ({ onOpenAddExpense }) => {
       case 'planning':
         return 'Планирование';
       case 'wishlist':
-        return 'Вишлист Дима';
+        return 'Вишлист';
       case 'cushion':
         return 'Подушка безопасности';
       case 'confirm-expenses':

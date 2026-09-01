@@ -7,22 +7,22 @@ import {
   Trash2, 
   Plus, 
   Clock, 
-  Receipt,
-  FileSpreadsheet,
-  Landmark,
-  Sparkles,
-  Check,
-  X,
-  CreditCard,
-  RefreshCw,
-  Send,
-  MessageSquare,
-  AlertTriangle,
-  ChevronDown,
-  ChevronUp
+  Receipt, 
+  FileSpreadsheet, 
+  Landmark, 
+  Sparkles, 
+  Check, 
+  X, 
+  RefreshCw, 
+  AlertCircle, 
+  HelpCircle, 
+  ArrowRight,
+  ChevronDown, 
+  ChevronUp,
+  BookmarkCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ExpenseItem, BankTransaction } from '../types';
+import { ExpenseItem, BankTransaction, PlannedItem } from '../types';
 import { BalanceAuditCard } from './BalanceAuditCard';
 import { BankSyncModal } from './BankSyncModal';
 
@@ -46,25 +46,44 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
     pendingBankTransactionsCount,
     approveBankTransaction,
     rejectBankTransaction,
+    confirmPlannedBankTransaction,
     approveAllPendingBankTransactions,
-    rejectAllPendingBankTransactions,
     syncBankAccounts,
-    isBankSyncing,
-    parseAndImportBankSnippet
+    isBankSyncing
   } = useBudget();
 
   const [justConfirmedAll, setJustConfirmedAll] = useState(false);
   const [showFormulaBreakdown, setShowFormulaBreakdown] = useState(false);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
-  const [quickSmsText, setQuickSmsText] = useState('');
-  const [smsFeedback, setSmsFeedback] = useState<string | null>(null);
+  const [matchingDecisionTxId, setMatchingDecisionTxId] = useState<string | null>(null);
 
   const todayRecord = state.days.find(d => d.date === state.todayDate);
-  const expenses: ExpenseItem[] = todayRecord?.expenses || [];
+  const rawExpenses: ExpenseItem[] = todayRecord?.expenses || [];
+  
+  // Sort expenses by time descending (newest first)
+  const expenses = React.useMemo(() => {
+    return [...rawExpenses].sort((a, b) => (b.time || '').localeCompare(a.time || ''));
+  }, [rawExpenses]);
+
   const confirmedCount = expenses.filter(e => e.isConfirmed).length;
   const allConfirmed = expenses.length > 0 && confirmedCount === expenses.length;
 
-  const pendingBankTxs = (state.pendingBankTransactions || []).filter(t => t.status === 'pending');
+  const pendingBankTxs = (state.pendingBankTransactions || []).filter(
+    t => t.status === 'pending' && t.type !== 'income'
+  );
+
+  const formattedTodayDate = React.useMemo(() => {
+    try {
+      const parts = (state.todayDate || '').split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+      }
+      return 'сегодня';
+    } catch {
+      return 'сегодня';
+    }
+  }, [state.todayDate]);
 
   const handleConfirmAll = () => {
     confirmAllExpensesForDate(state.todayDate);
@@ -72,18 +91,6 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
     setTimeout(() => {
       setJustConfirmedAll(false);
     }, 2500);
-  };
-
-  const handleQuickSmsSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quickSmsText.trim()) return;
-
-    const res = parseAndImportBankSnippet(quickSmsText);
-    setSmsFeedback(res.message);
-    if (res.success) {
-      setQuickSmsText('');
-    }
-    setTimeout(() => setSmsFeedback(null), 3500);
   };
 
   const getCategoryEmoji = (categoryType: string) => {
@@ -100,13 +107,26 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
     }
   };
 
+  // Helper to find matching planned item for a bank transaction
+  const findMatchingPlannedItem = (tx: BankTransaction): PlannedItem | undefined => {
+    const txTitle = tx.title.toLowerCase();
+    return state.plannedItems.find(p => {
+      if (p.isPaid) return false;
+      const pTitle = p.title.toLowerCase();
+      const isFuel = pTitle.includes('бенз') && (txTitle.includes('азс') || txTitle.includes('лукойл') || txTitle.includes('газпром') || txTitle.includes('тебойл') || txTitle.includes('топлив'));
+      const isExactOrCloseTitle = txTitle.includes(pTitle) || pTitle.includes(txTitle);
+      const isExactAmount = Math.abs(p.amount - tx.amount) < 1;
+      return isFuel || isExactOrCloseTitle || (isExactAmount && p.category === tx.categoryType);
+    });
+  };
+
   return (
     <div className="flex flex-col gap-4 pb-28 pt-2">
       {/* 1. Header with back button and Bank Sync CTA */}
       <div className="flex items-center justify-between px-1">
         <button
           onClick={() => setActiveTab('today')}
-          className="flex items-center gap-1.5 text-xs font-bold text-[var(--color-text-main)] hover:text-[var(--color-accent)] bg-[var(--color-bg-card)] border border-[var(--color-border)] px-3 py-1.5 rounded-xl shadow-xs transition-colors"
+          className="flex items-center gap-1.5 text-xs font-bold text-[var(--color-text-main)] hover:text-[var(--color-accent)] bg-[var(--color-bg-card)] border border-[var(--color-border)] px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Назад</span>
@@ -115,7 +135,7 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsBankModalOpen(true)}
-            className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1.5 rounded-xl transition-all hover:bg-blue-500/20 active:scale-95"
+            className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1.5 rounded-xl transition-all hover:bg-blue-500/20 active:scale-95 cursor-pointer"
           >
             <Landmark className="w-3.5 h-3.5" />
             <span>Банки ({state.bankAccounts?.length || 0})</span>
@@ -138,7 +158,7 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
               <h2 className="text-lg font-extrabold text-[var(--color-text-main)]">Подтверждение трат</h2>
             </div>
             <p className="text-xs text-[var(--color-text-muted)]">
-              Сверьте фактические расходы за день и подтвердите чеки из банков
+              Сверьте фактические расходы за {formattedTodayDate} и подтвердите чеки из банков
             </p>
           </div>
 
@@ -183,7 +203,7 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
         {expenses.length > 0 && !allConfirmed && (
           <button
             onClick={handleConfirmAll}
-            className="w-full py-2.5 rounded-xl bg-[#006d37] dark:bg-[#10b981] text-white dark:text-[#041627] font-bold text-xs shadow-xs active:scale-98 transition-all flex items-center justify-center gap-1.5"
+            className="w-full py-2.5 rounded-xl bg-[#006d37] dark:bg-[#10b981] text-white dark:text-[#041627] font-bold text-xs shadow-xs active:scale-98 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <Check className="w-4 h-4" />
             <span>Подтвердить все учтенные расходы ({expenses.length})</span>
@@ -191,7 +211,7 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
         )}
       </motion.div>
 
-      {/* 3. SECTION: INCOMING BANK TRANSACTIONS (Операции из банковских приложений) */}
+      {/* 3. SECTION: INCOMING BANK TRANSACTIONS WITH SMART MATCHING */}
       <div className="flex flex-col gap-2">
         <div className="flex justify-between items-center px-1">
           <div className="flex items-center gap-2">
@@ -205,7 +225,7 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
             <button
               onClick={() => syncBankAccounts()}
               disabled={isBankSyncing}
-              className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
             >
               <RefreshCw className={`w-3 h-3 ${isBankSyncing ? 'animate-spin' : ''}`} />
               <span>Синхронизировать</span>
@@ -221,7 +241,7 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
             </div>
             <button
               onClick={() => syncBankAccounts()}
-              className="text-[11px] font-bold text-[var(--color-accent)] hover:underline shrink-0"
+              className="text-[11px] font-bold text-[var(--color-accent)] hover:underline shrink-0 cursor-pointer"
             >
               Проверить
             </button>
@@ -235,72 +255,110 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
               </span>
               <button
                 onClick={() => approveAllPendingBankTransactions()}
-                className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
+                className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Принять все ({pendingBankTxs.length})</span>
               </button>
             </div>
 
-            {pendingBankTxs.map((tx) => (
-              <motion.div
-                key={tx.id}
-                layout
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="p-3.5 rounded-2xl bg-[var(--color-bg-card)] border-2 border-blue-500/30 hover:border-blue-500/60 shadow-xs flex items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center text-base shrink-0">
-                    {getCategoryEmoji(tx.categoryType)}
-                  </div>
+            {pendingBankTxs.map((tx) => {
+              const matchingPlanned = findMatchingPlannedItem(tx);
 
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-bold text-[var(--color-text-main)] truncate">
-                        {tx.title}
-                      </span>
+              return (
+                <motion.div
+                  key={tx.id}
+                  layout
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="p-4 rounded-2xl bg-[var(--color-bg-card)] border-2 border-blue-500/30 hover:border-blue-500/60 shadow-xs flex flex-col gap-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center text-base shrink-0">
+                        {getCategoryEmoji(tx.categoryType)}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-bold text-[var(--color-text-main)] truncate">
+                            {tx.title}
+                          </span>
+                        </div>
+
+                        <div className="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.2 rounded-md">
+                            {tx.bankName} {tx.accountNumberMask}
+                          </span>
+                          <span>•</span>
+                          <span>{tx.categoryName}</span>
+                          <span>•</span>
+                          <span>{tx.time}</span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1.5 flex-wrap">
-                      <span className="font-semibold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.2 rounded-md">
-                        {tx.bankName} {tx.accountNumberMask}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-base font-extrabold text-[var(--color-danger)]">
+                        -{formatRubles(tx.amount)}
                       </span>
-                      <span>•</span>
-                      <span>{tx.categoryName}</span>
-                      <span>•</span>
-                      <span>{tx.time}</span>
+
+                      <button
+                        onClick={() => rejectBankTransaction(tx.id)}
+                        className="p-2 rounded-xl bg-[var(--color-bg-card-subtle)] hover:bg-rose-500/20 text-[var(--color-text-muted)] hover:text-rose-500 border border-[var(--color-border)] active:scale-95 transition-all cursor-pointer"
+                        title="Отклонить операцию (перевод/не расход)"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-sm font-extrabold text-[var(--color-danger)]">
-                    -{formatRubles(tx.amount)}
-                  </span>
+                  {/* Planned match notification if detected */}
+                  {matchingPlanned ? (
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col gap-2">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
+                            Обнаружено совпадение операций. Это запланированный расход?
+                          </span>
+                          <span className="text-[11px] text-amber-800/80 dark:text-amber-300/80 block mt-0.5">
+                            В разделе «Планы» есть статья: <strong>{matchingPlanned.title}</strong> ({formatRubles(matchingPlanned.amount)}).
+                          </span>
+                        </div>
+                      </div>
 
-                  {/* Actions: Approve / Reject */}
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => approveBankTransaction(tx.id)}
-                      className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs active:scale-95 transition-all"
-                      title="Принять и внести в расходы"
-                    >
-                      <Check className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => rejectBankTransaction(tx.id)}
-                      className="p-2 rounded-xl bg-[var(--color-bg-card-subtle)] hover:bg-rose-500/20 text-[var(--color-text-muted)] hover:text-rose-500 border border-[var(--color-border)] active:scale-95 transition-all"
-                      title="Отклонить (перевод/не расход)"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+                      <div className="flex items-center gap-2 pt-1 flex-wrap sm:flex-nowrap">
+                        <button
+                          onClick={() => confirmPlannedBankTransaction(tx.id, matchingPlanned.id)}
+                          className="flex-1 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <BookmarkCheck className="w-3.5 h-3.5" />
+                          <span>Да, это из Планов ({matchingPlanned.title})</span>
+                        </button>
+                        <button
+                          onClick={() => approveBankTransaction(tx.id)}
+                          className="py-2 px-3 rounded-xl bg-[var(--color-bg-card)] hover:bg-[var(--color-bg-card-subtle)] border border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-main)] active:scale-95 transition-all cursor-pointer"
+                        >
+                          Нет, расход за сегодня
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-[var(--color-border-subtle)]">
+                      <button
+                        onClick={() => approveBankTransaction(tx.id)}
+                        className="py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Подтвердить расход за сегодня</span>
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -309,11 +367,11 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
       <div className="flex flex-col gap-2">
         <div className="flex justify-between items-center px-1">
           <h3 className="text-xs font-bold text-[var(--color-text-main)] uppercase tracking-wider">
-            Расходы за 26 августа ({expenses.length})
+            Расходы за {formattedTodayDate} ({expenses.length})
           </h3>
           <button
             onClick={onOpenAddExpense}
-            className="flex items-center gap-1 text-xs font-semibold text-[var(--color-accent)] hover:opacity-80"
+            className="flex items-center gap-1 text-xs font-semibold text-[var(--color-accent)] hover:opacity-80 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Добавить чек вручную</span>
@@ -392,7 +450,7 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
                       e.stopPropagation();
                       deleteExpenseFromDate(state.todayDate, item.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-[var(--color-text-muted)] hover:text-[var(--color-danger)] transition-all ml-1"
+                    className="opacity-0 group-hover:opacity-100 p-1 text-[var(--color-text-muted)] hover:text-[var(--color-danger)] transition-all ml-1 cursor-pointer"
                     title="Удалить"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -404,47 +462,14 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
         )}
       </div>
 
-      {/* 5. FAST SMS & PUSH PARSER WIDGET */}
-      <div className="bg-[var(--color-bg-card)] rounded-2xl p-4 shadow-xs border border-[var(--color-border)] flex flex-col gap-2.5">
-        <div className="flex items-center gap-2">
-          <MessageSquare className="w-4 h-4 text-[var(--color-accent)]" />
-          <h3 className="text-xs font-bold text-[var(--color-text-main)] uppercase tracking-wider">
-            Быстрое распознавание SMS / Push банка
-          </h3>
-        </div>
-
-        <form onSubmit={handleQuickSmsSubmit} className="flex gap-2">
-          <input
-            type="text"
-            value={quickSmsText}
-            onChange={(e) => setQuickSmsText(e.target.value)}
-            placeholder="Вставьте текст: СберБанк Покупка 450р Магнит или Т-Банк 1200р"
-            className="flex-1 text-xs font-medium px-3 py-2 rounded-xl bg-[var(--color-input-bg)] border border-[var(--color-input-border)] text-[var(--color-text-main)] focus:ring-1 focus:ring-[var(--color-accent)] focus:outline-none"
-          />
-          <button
-            type="submit"
-            className="py-2 px-3 bg-[#041627] dark:bg-[#10b981] text-white dark:text-[#041627] rounded-xl text-xs font-bold flex items-center gap-1 active:scale-95 transition-all shadow-xs"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>Внести</span>
-          </button>
-        </form>
-
-        {smsFeedback && (
-          <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-            {smsFeedback}
-          </div>
-        )}
-      </div>
-
-      {/* 6. BALANCE AUDIT & CORRECTION CARD */}
+      {/* 5. BALANCE AUDIT & CORRECTION CARD */}
       <BalanceAuditCard onOpenBankModal={() => setIsBankModalOpen(true)} />
 
-      {/* 7. Live Formula Engine Breakdown */}
+      {/* 6. Live Formula Engine Breakdown */}
       <div className="bg-[var(--color-bg-card)] rounded-2xl p-4 shadow-xs border border-[var(--color-border)] flex flex-col gap-3">
         <button
           onClick={() => setShowFormulaBreakdown(!showFormulaBreakdown)}
-          className="flex items-center justify-between text-left w-full"
+          className="flex items-center justify-between text-left w-full cursor-pointer"
         >
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="w-4 h-4 text-[var(--color-accent)]" />

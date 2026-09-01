@@ -8,12 +8,24 @@ import {
   ActiveTab, 
   BankAccount, 
   BankTransaction,
-  ExpenseCategory 
+  ExpenseCategory,
+  MandatoryExpense,
+  CushionMonthPlan,
+  IncomeItem,
+  IncomeSourceType
 } from '../types';
 import { INITIAL_BUDGET_STATE } from '../mockData';
 import { useAuth } from './AuthContext';
 import { db, doc, setDoc, onSnapshot } from '../lib/firebase';
 import { getSalaryDateInfo, SalaryScheduleInfo, generateMonthDays } from '../utils/salaryUtils';
+import { 
+  PeriodTemplate, 
+  generateRollingPeriodTemplates, 
+  generatePeriodTemplateForMonth, 
+  findPeriodTemplateForDate 
+} from '../utils/periodUtils';
+
+const STORAGE_KEY = 'daily_limit_budget_app_state_v3';
 
 export interface UnrealizedPlanSaving {
   id: string;
@@ -65,6 +77,12 @@ export interface BudgetContextType {
   totalUnconfirmedCount: number; // Total unconfirmed expenses count
   
   // Period & Salary Rollover info
+  rollingPeriods: PeriodTemplate[];
+  currentPeriodTemplate: PeriodTemplate;
+  selectedPeriodId: string;
+  setSelectedPeriodId: (periodId: string) => void;
+  activeViewingPeriod: PeriodTemplate;
+  setPeriodByTemplate: (periodId: string) => void;
   salarySchedule: SalaryScheduleInfo;
   periodEndingRemainderInfo: PeriodEndingRemainderInfo;
 
@@ -75,10 +93,18 @@ export interface BudgetContextType {
   pendingBankTransactionsCount: number;
   isBankSyncing: boolean;
 
+  // Incomes & Inflow Analysis
+  incomes: IncomeItem[];
+  pendingBankIncomes: BankTransaction[];
+  pendingBankIncomesCount: number;
+  pendingBankIncomesTotal: number;
+  totalIncludedAdditionalIncomes: number;
+
   // Advance & Correction metrics
   isAdvanceDateReached: boolean;
   unreachedPlannedExpenses: number; // Недостигнутые запланированные расходы (в т.ч. остаток лимита на бензин)
-  calculatedBudgetCorrection: number; // Точная формула: (D5 - баланс_карт [ + аванс_если_до_20 ] - недостигнутый_план)
+  calculatedBudgetCorrection: number; // Формула: Чистый_остаток - (баланс_карт [ + аванс_до_20 ] - нереализованные_планы)
+  isBalanceSynced: boolean;
 
   // Actions
   addExpenseToDate: (date: string, expense: Omit<ExpenseItem, 'id'>) => void;
@@ -92,22 +118,55 @@ export interface BudgetContextType {
   deletePlannedItem: (id: string) => void;
   updatePlannedItemProgress: (id: string, spentAmount: number) => void;
   addSpentToPlannedItem: (id: string, amountToAdd: number) => void;
+  movePlannedToWishlist: (id: string) => void;
   applyBudgetCorrection: (target?: 'planned' | 'today') => { success: boolean; message: string; amount: number };
+  applyBalanceSync: () => { success: boolean; message: string; amount: number };
   updateAdvanceSettings: (estimatedAmount: number, advanceDateDay: number) => void;
+  
+  // Wishlist actions
   toggleWishlistPurchased: (id: string) => void;
   addWishlistItem: (item: Omit<WishlistItem, 'id'>) => void;
+  updateWishlistItem: (id: string, updated: Partial<WishlistItem>) => void;
   deleteWishlistItem: (id: string) => void;
+  clearPurchasedWishlist: () => void;
+  moveWishlistToPlanned: (id: string, period?: string) => void;
+
+  // Cushion & Mandatory expenses actions
   depositToCushion: (amount: number) => void;
+  withdrawFromCushion: (amount: number, reason?: string) => void;
+  updateCushionAccumulated: (amount: number) => void;
+  updateCashSavings: (amount: number) => void;
+  updateCushionMonthlyContribution: (amount: number) => void;
+  updateCurrentSalary: (salary: number) => void;
+  setCushionDepositStatus: (isDeposited: boolean, amount?: number) => void;
+  updateActualCushionDepositThisMonth: (amount: number) => void;
+  updateCushionNorm: (mode: 'percent' | 'fixed', percent?: number, fixedAmount?: number) => void;
+  updateMandatoryExpense: (id: string, updated: Partial<MandatoryExpense>) => void;
+  addMandatoryExpense: (expense: Omit<MandatoryExpense, 'id'>) => void;
+  deleteMandatoryExpense: (id: string) => void;
+  setMandatoryExpensesMode: (mode: 'manual' | 'auto') => void;
+
   updateBudgetSettings: (budget: number, rollover: number, cushionDeposit: number, salary: number) => void;
   startNewPeriod: (options?: { newSalary?: number; targetDate?: string; customRollover?: number }) => { success: boolean; message: string; rolloverAmount: number };
   ensureDaysForMonth: (year: number, month: number) => void;
   resetToDefaults: () => void;
 
+  // Incomes Actions
+  acceptBankIncomeToBudget: (transactionId: string, customCategory?: string, customTitle?: string) => void;
+  rejectBankIncome: (transactionId: string) => void;
+  addManualIncome: (income: Omit<IncomeItem, 'id' | 'createdAt'>) => void;
+  toggleIncomeBudgetInclusion: (incomeId: string) => void;
+  deleteIncome: (incomeId: string) => void;
+  editIncome: (incomeId: string, updated: Partial<IncomeItem>) => void;
+
   // Banking Actions
   approveBankTransaction: (transactionId: string) => void;
   rejectBankTransaction: (transactionId: string) => void;
+  confirmPlannedBankTransaction: (transactionId: string, plannedItemId: string) => { success: boolean; message: string };
+  transferPlannedItemPeriod: (itemId: string, targetPeriod: string) => void;
   approveAllPendingBankTransactions: () => void;
   rejectAllPendingBankTransactions: () => void;
+  confirmPendingIncome: (transactionId: string, isIncome: boolean) => void;
   syncBankAccounts: () => Promise<void>;
   parseAndImportBankSnippet: (snippet: string) => { success: boolean; message: string; transaction?: BankTransaction };
   reconcileCushionWithBank: (bankAccountId?: string) => { success: boolean; message: string; interestAdded: number };
@@ -117,7 +176,119 @@ export interface BudgetContextType {
   removeBankAccount: (id: string) => void;
 }
 
-const STORAGE_KEY = 'limit_dnya_budget_state_v3';
+// Monthly cushion norm calculator
+export function calculateMonthlyCushionNorm(
+  salary: number,
+  mode: 'percent' | 'fixed' = 'percent',
+  percent: number = 10,
+  fixedAmount: number = 8265
+): number {
+  if (mode === 'fixed') {
+    return Math.max(0, Math.round((fixedAmount || 0) * 100) / 100);
+  }
+  const pct = typeof percent === 'number' && !isNaN(percent) ? percent : 10;
+  return Math.max(0, Math.round(salary * (pct / 100) * 100) / 100);
+}
+
+// Dynamic cushion schedule generator helper based on exact user specification
+export function generateDynamicCushionSchedule(params: {
+  currentSalary: number;
+  isDepositMade: boolean;
+  actualDepositAmount: number;
+  bankAccumulated: number;
+  startMonth?: number;
+  startYear?: number;
+  rateInfo?: string;
+  normMode?: 'percent' | 'fixed';
+  normPercent?: number;
+  normFixedAmount?: number;
+}): CushionMonthPlan[] {
+  const {
+    currentSalary,
+    isDepositMade,
+    actualDepositAmount,
+    bankAccumulated,
+    startMonth = 8,
+    startYear = 2026,
+    rateInfo = '13.5%',
+    normMode = 'percent',
+    normPercent = 10,
+    normFixedAmount = 8265,
+  } = params;
+
+  const monthsRu = [
+    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+  ];
+
+  const schedule: CushionMonthPlan[] = [];
+  const monthlyNorm = calculateMonthlyCushionNorm(currentSalary, normMode, normPercent, normFixedAmount);
+
+  // Month 0 (August 2026):
+  // If deposit made: target = actualDepositAmount (includes difference from norm)
+  // If deposit not made: target = monthlyNorm
+  const targetMonth0 = isDepositMade ? actualDepositAmount : monthlyNorm;
+
+  let currentY = startYear;
+  let currentM = startMonth;
+  let runningTarget = targetMonth0;
+
+  const TOTAL_MONTHS = 48; // 4 years projection (2026 - 2030)
+
+  for (let i = 0; i < TOTAL_MONTHS; i++) {
+    const monthName = monthsRu[currentM - 1];
+
+    if (i === 0) {
+      // Current month (August 2026): filled because contribution has been made
+      const depositThisMonth = isDepositMade ? actualDepositAmount : 0;
+      const balanceThisMonth = isDepositMade ? bankAccumulated : 0;
+      const capitalizationThisMonth = isDepositMade
+        ? Math.max(0, Math.round((bankAccumulated - depositThisMonth) * 100) / 100) || 4.53
+        : 0;
+      const deviationThisMonth = isDepositMade
+        ? Math.round((balanceThisMonth - targetMonth0) * 100) / 100
+        : -targetMonth0;
+
+      schedule.push({
+        year: currentY,
+        monthName,
+        targetAccumulated: targetMonth0,
+        monthlyDeposit: depositThisMonth,
+        rateInfo: isDepositMade ? rateInfo : '—',
+        capitalization: capitalizationThisMonth,
+        expense: 0,
+        balance: balanceThisMonth,
+        deviation: deviationThisMonth,
+      });
+
+      runningTarget = targetMonth0;
+    } else {
+      // Future months: Цель на период = Цель(предыдущего месяца) + норма от зарплаты (или фикс)
+      runningTarget = Math.round((runningTarget + monthlyNorm) * 100) / 100;
+
+      // Only "Цель на период" is filled for future rows; other columns remain unfilled ('—')
+      schedule.push({
+        year: currentY,
+        monthName,
+        targetAccumulated: runningTarget,
+        monthlyDeposit: 0,
+        rateInfo: '—',
+        capitalization: 0,
+        expense: 0,
+        balance: 0,
+        deviation: 0,
+      });
+    }
+
+    currentM++;
+    if (currentM > 12) {
+      currentM = 1;
+      currentY++;
+    }
+  }
+
+  return schedule;
+}
 const THEME_STORAGE_KEY = 'limit_dnya_theme_mode';
 
 const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
@@ -148,9 +319,10 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // ensure bank properties exist
+        // ensure bank and income properties exist
         if (!parsed.bankAccounts) parsed.bankAccounts = INITIAL_BUDGET_STATE.bankAccounts;
         if (!parsed.pendingBankTransactions) parsed.pendingBankTransactions = INITIAL_BUDGET_STATE.pendingBankTransactions;
+        if (!parsed.incomes) parsed.incomes = INITIAL_BUDGET_STATE.incomes || [];
         return parsed;
       }
     } catch {
@@ -161,6 +333,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('today');
   const [selectedDate, setSelectedDate] = useState<string>(state.todayDate);
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('2026-08');
   const [isMobileFrame, setIsMobileFrame] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth > 768;
@@ -268,9 +441,11 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // EXACT GOOGLE SPREADSHEET FORMULA ENGINE
   // ==========================================
 
-  // 1. Total planned items sum = SUM(B4:B20)
+  // 1. Total planned items sum = SUM(B4:B20) for current period only
   const totalPlannedSum = useMemo(() => {
-    return (state.plannedItems || []).reduce((acc, item) => acc + item.amount, 0);
+    return (state.plannedItems || [])
+      .filter(item => !item.period || item.period === 'current')
+      .reduce((acc, item) => acc + item.amount, 0);
   }, [state.plannedItems]);
 
   // 2. D1 "Итого на прочее" = B1 (Общий бюджет) - SUM(B4:B20) (Плановые статьи) - B3 (Подушка)
@@ -308,11 +483,13 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return Math.max(0, freeDiscretionaryBudget - totalPastAndTodaySpent);
   }, [freeDiscretionaryBudget, totalPastAndTodaySpent]);
 
-  // 7. E3 "Общий допустимый расход на сегодня" = D5 / D3
+  // 7. E3 "Общий допустимый расход на сегодня" = D5 / D3 (текущий остаток, деленный на количество дней до зарплаты, гарантированно не 0)
   const todayAllowedSpend = useMemo(() => {
-    if (daysToSalary <= 0) return cleanRemainderToday;
-    return cleanRemainderToday / daysToSalary;
-  }, [cleanRemainderToday, daysToSalary]);
+    const daysCount = Math.max(1, daysToSalary);
+    const calculated = cleanRemainderToday / daysCount;
+    if (calculated > 0) return calculated;
+    return baseDailyNorm > 0 ? baseDailyNorm : 1155.51;
+  }, [cleanRemainderToday, daysToSalary, baseDailyNorm]);
 
   // Today record & today spent
   const todayRecord = useMemo(() => {
@@ -404,6 +581,33 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return (state.pendingBankTransactions || []).filter(t => t.status === 'pending').length;
   }, [state.pendingBankTransactions]);
 
+  // Incoming bank transactions awaiting user decision
+  const pendingBankIncomes = useMemo(() => {
+    return (state.pendingBankTransactions || []).filter(
+      t => (t.type === 'income' || t.type === 'transfer' || t.type === 'interest') && t.status === 'pending'
+    );
+  }, [state.pendingBankTransactions]);
+
+  const pendingBankIncomesCount = useMemo(() => {
+    return pendingBankIncomes.length;
+  }, [pendingBankIncomes]);
+
+  const pendingBankIncomesTotal = useMemo(() => {
+    return pendingBankIncomes.reduce((acc, t) => acc + t.amount, 0);
+  }, [pendingBankIncomes]);
+
+  // Total additional incomes currently active and included into 30-days budget
+  const totalIncludedAdditionalIncomes = useMemo(() => {
+    return (state.incomes || [])
+      .filter(i => i.isIncludedInBudget)
+      .reduce((acc, i) => acc + i.amount, 0);
+  }, [state.incomes]);
+
+  // List of incomes
+  const incomes = useMemo(() => {
+    return state.incomes || [];
+  }, [state.incomes]);
+
   // ==========================================
   // ADVANCE & CORRECTION FORMULA ENGINE
   // ==========================================
@@ -443,17 +647,15 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }, 0);
   }, [state.plannedItems]);
 
-  // 3. Exact correction calculation according to user's formula:
-  // a) If advance date NOT reached:
-  //    Correction = cleanRemainderToday - totalCheckingBankBalance + estimatedAdvanceAmount - unreachedPlannedExpenses
-  // b) If advance date HAS reached:
-  //    Correction = cleanRemainderToday - totalCheckingBankBalance - unreachedPlannedExpenses
+  // Exact correction calculation according to user's updated formula:
+  // a) До аванса: Корректировка = Чистый текущий остаток - (текущий баланс по карте + предполагаемый аванс - планируемые нереализованные расходы)
+  // b) После аванса: Корректировка = Чистый текущий остаток - (текущий баланс по карте - планируемые нереализованные расходы)
   const calculatedBudgetCorrection = useMemo(() => {
     const estimatedAdv = state.estimatedAdvanceAmount || 40000;
     if (!isAdvanceDateReached) {
-      return cleanRemainderToday - totalCheckingBankBalance + estimatedAdv - unreachedPlannedExpenses;
+      return cleanRemainderToday - (totalCheckingBankBalance + estimatedAdv - unreachedPlannedExpenses);
     } else {
-      return cleanRemainderToday - totalCheckingBankBalance - unreachedPlannedExpenses;
+      return cleanRemainderToday - (totalCheckingBankBalance - unreachedPlannedExpenses);
     }
   }, [
     isAdvanceDateReached,
@@ -463,9 +665,38 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     unreachedPlannedExpenses
   ]);
 
+  const isBalanceSynced = useMemo(() => {
+    return Boolean(state.isBalanceSynced) || Math.abs(calculatedBudgetCorrection) < 1;
+  }, [state.isBalanceSynced, calculatedBudgetCorrection]);
+
   // ==========================================
   // SALARY SCHEDULE & PERIOD ROLLOVER ENGINE
   // ==========================================
+
+  // 1. Dynamic Rolling Period Templates (always includes 12+ months ahead)
+  const rollingPeriods = useMemo(() => {
+    const refDate = state.todayDate || '2026-08-26';
+    const salaryDay = state.salaryDateDay || 5;
+    const advanceDay = state.advanceDateDay || 20;
+    return generateRollingPeriodTemplates(refDate, 4, 14, salaryDay, advanceDay);
+  }, [state.todayDate, state.salaryDateDay, state.advanceDateDay]);
+
+  // 2. Current period template matching state.todayDate
+  const currentPeriodTemplate = useMemo(() => {
+    const refDate = state.todayDate || '2026-08-26';
+    const found = findPeriodTemplateForDate(refDate, rollingPeriods);
+    if (found) return found;
+    return generatePeriodTemplateForMonth(2026, 8, state.salaryDateDay || 5, state.advanceDateDay || 20, refDate);
+  }, [state.todayDate, state.salaryDateDay, state.advanceDateDay, rollingPeriods]);
+
+  // 3. Active viewing period (can be switched by user via dropdown in any widget)
+  const activeViewingPeriod = useMemo(() => {
+    return rollingPeriods.find(p => p.id === selectedPeriodId) || currentPeriodTemplate;
+  }, [rollingPeriods, selectedPeriodId, currentPeriodTemplate]);
+
+  const setPeriodByTemplate = (periodId: string) => {
+    setSelectedPeriodId(periodId);
+  };
 
   // Salary Schedule for the current active period/month
   const salarySchedule = useMemo(() => {
@@ -565,11 +796,13 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
           const updatedExpenses = [...(d.expenses || []), newExp];
           const newSpent = updatedExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+          const currentLimit = baseDailyNorm > 0 ? baseDailyNorm : d.normLimit;
           return {
             ...d,
             expenses: updatedExpenses,
             spent: newSpent,
-            deviation: d.normLimit - newSpent,
+            normLimit: currentLimit,
+            deviation: currentLimit - newSpent,
           };
         }
         return d;
@@ -596,6 +829,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const updateExpense = (date: string, expenseId: string, updated: Partial<ExpenseItem>) => {
     setState(prev => {
+      const currentLimit = baseDailyNorm > 0 ? baseDailyNorm : 1859.46;
       const newDays = (prev.days || []).map(d => {
         if (d.date === date) {
           const updatedExpenses = (d.expenses || []).map(e => 
@@ -606,7 +840,8 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             ...d,
             expenses: updatedExpenses,
             spent: newSpent,
-            deviation: d.normLimit - newSpent,
+            normLimit: currentLimit,
+            deviation: currentLimit - newSpent,
           };
         }
         return d;
@@ -618,6 +853,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const deleteExpenseFromDate = (date: string, expenseId: string) => {
     setState(prev => {
       let deletedExp: ExpenseItem | undefined;
+      const currentLimit = baseDailyNorm > 0 ? baseDailyNorm : 1859.46;
       const newDays = (prev.days || []).map(d => {
         if (d.date === date) {
           deletedExp = (d.expenses || []).find(e => e.id === expenseId);
@@ -627,7 +863,8 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             ...d,
             expenses: updatedExpenses,
             spent: newSpent,
-            deviation: d.normLimit - newSpent,
+            normLimit: currentLimit,
+            deviation: currentLimit - newSpent,
           };
         }
         return d;
@@ -755,70 +992,138 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
-  // User's exact correction application
-  const applyBudgetCorrection = (target: 'planned' | 'today' = 'planned') => {
+  // User's exact correction application and balance sync
+  const applyBalanceSync = () => {
     const correctionVal = calculatedBudgetCorrection;
-    const absVal = Math.round(Math.abs(correctionVal) * 100) / 100;
     
-    if (target === 'planned') {
-      setState(prev => {
-        const noteText = isAdvanceDateReached
-          ? `Корректировка после аванса (20.08). Баланс карт: ${formatRubles(totalCheckingBankBalance)}, Недостигнутый план: ${formatRubles(unreachedPlannedExpenses)}`
-          : `Корректировка до аванса (+${formatRubles(state.estimatedAdvanceAmount || 40000)}). Баланс карт: ${formatRubles(totalCheckingBankBalance)}, Недостигнутый план: ${formatRubles(unreachedPlannedExpenses)}`;
-        
-        const existingIndex = (prev.plannedItems || []).findIndex(
-          i => i.title.toLowerCase() === 'корректировка' || i.title.toLowerCase().includes('корректировка бюджета')
-        );
+    setState(prev => {
+      const existingIndex = (prev.plannedItems || []).findIndex(
+        i => i.title.toLowerCase() === 'корректировка' || i.title.toLowerCase().includes('корректировка бюджета')
+      );
 
-        let updatedPlanned = [...(prev.plannedItems || [])];
-        if (existingIndex >= 0) {
-          const currentAmt = updatedPlanned[existingIndex].amount || 0;
-          const targetAmt = Math.max(0, Math.round((currentAmt + correctionVal) * 100) / 100);
+      let updatedPlanned = [...(prev.plannedItems || [])];
+      const noteText = isAdvanceDateReached
+        ? `Корректировка после аванса (баланс карт: ${formatRubles(totalCheckingBankBalance)}, нереализованные планы: ${formatRubles(unreachedPlannedExpenses)})`
+        : `Корректировка до аванса (+${formatRubles(state.estimatedAdvanceAmount || 40000)}, баланс карт: ${formatRubles(totalCheckingBankBalance)})`;
+
+      if (existingIndex >= 0) {
+        const currentAmt = updatedPlanned[existingIndex].amount || 0;
+        const newAmt = currentAmt + correctionVal;
+        if (newAmt >= 0) {
           updatedPlanned[existingIndex] = {
             ...updatedPlanned[existingIndex],
-            amount: targetAmt,
+            amount: Math.round(newAmt * 100) / 100,
             isPaid: true,
             notes: noteText,
           };
+          return {
+            ...prev,
+            isBalanceSynced: true,
+            plannedItems: updatedPlanned,
+          };
         } else {
+          updatedPlanned[existingIndex] = {
+            ...updatedPlanned[existingIndex],
+            amount: 0,
+            isPaid: true,
+            notes: noteText,
+          };
+          const extraDiff = Math.abs(newAmt);
+          return {
+            ...prev,
+            previousMonthRemainder: Math.round(((prev.previousMonthRemainder || 0) + extraDiff) * 100) / 100,
+            total30DaysBudget: Math.round(((prev.total30DaysBudget || 0) + extraDiff) * 100) / 100,
+            isBalanceSynced: true,
+            plannedItems: updatedPlanned,
+          };
+        }
+      } else {
+        if (correctionVal >= 0) {
           updatedPlanned.push({
             id: `p-corr-${Date.now()}`,
             title: 'Корректировка',
-            amount: absVal,
+            amount: Math.round(correctionVal * 100) / 100,
             category: 'прочее',
             isPaid: true,
             notes: noteText,
+            period: 'current',
           });
+          return {
+            ...prev,
+            isBalanceSynced: true,
+            plannedItems: updatedPlanned,
+          };
+        } else {
+          const extraDiff = Math.abs(correctionVal);
+          return {
+            ...prev,
+            previousMonthRemainder: Math.round(((prev.previousMonthRemainder || 0) + extraDiff) * 100) / 100,
+            total30DaysBudget: Math.round(((prev.total30DaysBudget || 0) + extraDiff) * 100) / 100,
+            isBalanceSynced: true,
+            plannedItems: updatedPlanned,
+          };
         }
+      }
+    });
 
-        return {
-          ...prev,
-          plannedItems: updatedPlanned,
-        };
-      });
+    return {
+      success: true,
+      message: 'Баланс синхронизирован, чистый остаток скорректирован!',
+      amount: correctionVal,
+    };
+  };
+
+  const applyBudgetCorrection = (target: 'planned' | 'today' = 'planned') => {
+    return applyBalanceSync();
+  };
+
+  // Move a planned expense back to wishlist
+  const movePlannedToWishlist = (id: string) => {
+    setState(prev => {
+      const itemToMove = (prev.plannedItems || []).find(p => p.id === id);
+      if (!itemToMove) return prev;
+
+      const newWishlistItem: WishlistItem = {
+        id: `w-${Date.now()}`,
+        title: itemToMove.title,
+        price: itemToMove.amount,
+        url: '',
+        marketplace: 'other',
+        isPurchased: false,
+        priority: 'medium',
+        notes: itemToMove.notes || 'Перенесено из раздела планов',
+      };
 
       return {
-        success: true,
-        message: `Баланс синхронизирован! Корректировка учтена в бюджете.`,
-        amount: correctionVal,
+        ...prev,
+        plannedItems: (prev.plannedItems || []).filter(p => p.id !== id),
+        wishlist: [newWishlistItem, ...(prev.wishlist || [])],
       };
-    } else {
-      addExpenseToDate(state.todayDate, {
-        title: 'Корректировка бюджета',
-        amount: absVal,
-        category: 'Корректировка',
-        categoryType: 'прочее',
-        time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-        isConfirmed: true,
-        notes: isAdvanceDateReached ? 'Корректировка после аванса' : 'Корректировка с учетом аванса',
-      });
+    });
+  };
+
+  // Move wishlist item into active budget planning
+  const moveWishlistToPlanned = (id: string, period: string = 'current') => {
+    setState(prev => {
+      const wishItem = (prev.wishlist || []).find(w => w.id === id);
+      if (!wishItem) return prev;
+
+      const newPlanned: PlannedItem = {
+        id: `p-${Date.now()}`,
+        title: wishItem.title,
+        amount: wishItem.price,
+        category: 'покупки',
+        isPaid: false,
+        notes: wishItem.notes || `Из вишлиста (${wishItem.marketplace.toUpperCase()})`,
+        period,
+      };
 
       return {
-        success: true,
-        message: `Расход-корректировка на ${formatRubles(absVal)} записан в Сегодня!`,
-        amount: correctionVal,
+        ...prev,
+        wishlist: (prev.wishlist || []).filter(w => w.id !== id),
+        plannedItems: [newPlanned, ...(prev.plannedItems || [])],
       };
-    }
+    });
   };
 
   const toggleWishlistPurchased = (id: string) => {
@@ -841,6 +1146,15 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }));
   };
 
+  const updateWishlistItem = (id: string, updated: Partial<WishlistItem>) => {
+    setState(prev => ({
+      ...prev,
+      wishlist: (prev.wishlist || []).map(item =>
+        item.id === id ? { ...item, ...updated } : item
+      ),
+    }));
+  };
+
   const deleteWishlistItem = (id: string) => {
     setState(prev => ({
       ...prev,
@@ -848,21 +1162,360 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }));
   };
 
-  const depositToCushion = (amount: number) => {
+  const clearPurchasedWishlist = () => {
     setState(prev => ({
       ...prev,
-      cushionAccumulated: prev.cushionAccumulated + amount,
+      wishlist: (prev.wishlist || []).filter(i => !i.isPurchased),
+    }));
+  };
+
+  const transferPlannedItemPeriod = (itemId: string, targetPeriod: string) => {
+    setState(prev => ({
+      ...prev,
+      plannedItems: (prev.plannedItems || []).map(item =>
+        item.id === itemId ? { ...item, period: targetPeriod } : item
+      ),
+    }));
+  };
+
+  const depositToCushion = (amount: number) => {
+    setState(prev => {
+      const newAccumulated = prev.cushionAccumulated + amount;
+      const salary = prev.currentSalary || 82650;
+      const actualDeposit = amount;
+      const normMode = prev.cushionNormMode || 'percent';
+      const normPercent = prev.cushionNormPercent ?? 10;
+      const normFixedAmount = prev.cushionNormFixedAmount ?? 8265;
+
+      const newSchedule = generateDynamicCushionSchedule({
+        currentSalary: salary,
+        isDepositMade: true,
+        actualDepositAmount: actualDeposit,
+        bankAccumulated: newAccumulated,
+        startMonth: 8,
+        startYear: 2026,
+        normMode,
+        normPercent,
+        normFixedAmount,
+      });
+
+      return {
+        ...prev,
+        cushionAccumulated: newAccumulated,
+        isCushionDepositDoneThisMonth: true,
+        actualCushionDepositThisMonth: actualDeposit,
+        cushionSchedule: newSchedule,
+      };
+    });
+  };
+
+  const setCushionDepositStatus = (isDeposited: boolean, customAmount?: number) => {
+    setState(prev => {
+      const salary = prev.currentSalary || 82650;
+      const normMode = prev.cushionNormMode || 'percent';
+      const normPercent = prev.cushionNormPercent ?? 10;
+      const normFixedAmount = prev.cushionNormFixedAmount ?? 8265;
+      const normValue = calculateMonthlyCushionNorm(salary, normMode, normPercent, normFixedAmount);
+
+      const depositAmount = isDeposited
+        ? (customAmount !== undefined ? customAmount : (prev.actualCushionDepositThisMonth !== undefined && prev.actualCushionDepositThisMonth > 0 ? prev.actualCushionDepositThisMonth : normValue))
+        : 0;
+
+      const newSchedule = generateDynamicCushionSchedule({
+        currentSalary: salary,
+        isDepositMade: isDeposited,
+        actualDepositAmount: isDeposited ? depositAmount : normValue,
+        bankAccumulated: prev.cushionAccumulated || 8269.53,
+        startMonth: 8,
+        startYear: 2026,
+        normMode,
+        normPercent,
+        normFixedAmount,
+      });
+
+      return {
+        ...prev,
+        isCushionDepositDoneThisMonth: isDeposited,
+        actualCushionDepositThisMonth: isDeposited ? depositAmount : normValue,
+        cushionSchedule: newSchedule,
+      };
+    });
+  };
+
+  const updateActualCushionDepositThisMonth = (amount: number) => {
+    setState(prev => {
+      const cleanAmount = Math.max(0, amount);
+      const salary = prev.currentSalary || 82650;
+      const normMode = prev.cushionNormMode || 'percent';
+      const normPercent = prev.cushionNormPercent ?? 10;
+      const normFixedAmount = prev.cushionNormFixedAmount ?? 8265;
+      const isDepositMade = prev.isCushionDepositDoneThisMonth ?? true;
+
+      const newSchedule = generateDynamicCushionSchedule({
+        currentSalary: salary,
+        isDepositMade,
+        actualDepositAmount: cleanAmount,
+        bankAccumulated: prev.cushionAccumulated || 8269.53,
+        startMonth: 8,
+        startYear: 2026,
+        normMode,
+        normPercent,
+        normFixedAmount,
+      });
+
+      return {
+        ...prev,
+        actualCushionDepositThisMonth: cleanAmount,
+        cushionSchedule: newSchedule,
+      };
+    });
+  };
+
+  const updateCushionNorm = (mode: 'percent' | 'fixed', percent?: number, fixedAmount?: number) => {
+    setState(prev => {
+      const salary = prev.currentSalary || 82650;
+      const newPercent = percent !== undefined ? percent : (prev.cushionNormPercent ?? 10);
+      const newFixed = fixedAmount !== undefined ? fixedAmount : (prev.cushionNormFixedAmount ?? 8265);
+      const newMonthlyNorm = calculateMonthlyCushionNorm(salary, mode, newPercent, newFixed);
+
+      const isDepositMade = prev.isCushionDepositDoneThisMonth ?? true;
+      const actualDeposit = prev.actualCushionDepositThisMonth ?? newMonthlyNorm;
+
+      const newSchedule = generateDynamicCushionSchedule({
+        currentSalary: salary,
+        isDepositMade,
+        actualDepositAmount: actualDeposit,
+        bankAccumulated: prev.cushionAccumulated || 8269.53,
+        startMonth: 8,
+        startYear: 2026,
+        normMode: mode,
+        normPercent: newPercent,
+        normFixedAmount: newFixed,
+      });
+
+      return {
+        ...prev,
+        cushionNormMode: mode,
+        cushionNormPercent: newPercent,
+        cushionNormFixedAmount: newFixed,
+        safetyCushionDeposit: newMonthlyNorm,
+        cushionMonthlyContribution: newMonthlyNorm,
+        cushionSchedule: newSchedule,
+      };
+    });
+  };
+
+  const updateCurrentSalary = (newSalary: number) => {
+    setState(prev => {
+      const isDepositMade = prev.isCushionDepositDoneThisMonth ?? true;
+      const normMode = prev.cushionNormMode || 'percent';
+      const normPercent = prev.cushionNormPercent ?? 10;
+      const normFixedAmount = prev.cushionNormFixedAmount ?? 8265;
+      const newCushionNorm = calculateMonthlyCushionNorm(newSalary, normMode, normPercent, normFixedAmount);
+      const actualDeposit = prev.actualCushionDepositThisMonth ?? newCushionNorm;
+      const bankAccumulated = prev.cushionAccumulated ?? 8269.53;
+
+      const newSchedule = generateDynamicCushionSchedule({
+        currentSalary: newSalary,
+        isDepositMade,
+        actualDepositAmount: actualDeposit,
+        bankAccumulated,
+        startMonth: 8,
+        startYear: 2026,
+        normMode,
+        normPercent,
+        normFixedAmount,
+      });
+
+      return {
+        ...prev,
+        currentSalary: newSalary,
+        safetyCushionDeposit: newCushionNorm,
+        cushionMonthlyContribution: newCushionNorm,
+        cushionSchedule: newSchedule,
+      };
+    });
+  };
+
+  const withdrawFromCushion = (amount: number, reason?: string) => {
+    setState(prev => {
+      const newAccumulated = Math.max(0, prev.cushionAccumulated - amount);
+      const isDepositMade = prev.isCushionDepositDoneThisMonth ?? true;
+      const actualDeposit = prev.actualCushionDepositThisMonth ?? 8265;
+      const normMode = prev.cushionNormMode || 'percent';
+      const normPercent = prev.cushionNormPercent ?? 10;
+      const normFixedAmount = prev.cushionNormFixedAmount ?? 8265;
+
+      const newSchedule = generateDynamicCushionSchedule({
+        currentSalary: prev.currentSalary || 82650,
+        isDepositMade,
+        actualDepositAmount: actualDeposit,
+        bankAccumulated: newAccumulated,
+        startMonth: 8,
+        startYear: 2026,
+        normMode,
+        normPercent,
+        normFixedAmount,
+      });
+
+      return {
+        ...prev,
+        cushionAccumulated: newAccumulated,
+        cushionSchedule: newSchedule,
+      };
+    });
+  };
+
+  const updateCushionAccumulated = (amount: number) => {
+    setState(prev => {
+      const newAccumulated = Math.max(0, amount);
+      const isDepositMade = prev.isCushionDepositDoneThisMonth ?? true;
+      const actualDeposit = prev.actualCushionDepositThisMonth ?? 8265;
+      const normMode = prev.cushionNormMode || 'percent';
+      const normPercent = prev.cushionNormPercent ?? 10;
+      const normFixedAmount = prev.cushionNormFixedAmount ?? 8265;
+
+      const newSchedule = generateDynamicCushionSchedule({
+        currentSalary: prev.currentSalary || 82650,
+        isDepositMade,
+        actualDepositAmount: actualDeposit,
+        bankAccumulated: newAccumulated,
+        startMonth: 8,
+        startYear: 2026,
+        normMode,
+        normPercent,
+        normFixedAmount,
+      });
+
+      return {
+        ...prev,
+        cushionAccumulated: newAccumulated,
+        cushionSchedule: newSchedule,
+      };
+    });
+  };
+
+  const updateCashSavings = (amount: number) => {
+    setState(prev => ({
+      ...prev,
+      cushionCash: Math.max(0, amount),
+    }));
+  };
+
+  const updateCushionMonthlyContribution = (amount: number) => {
+    setState(prev => {
+      const newDeposit = Math.max(0, amount);
+      const isDepositMade = prev.isCushionDepositDoneThisMonth ?? true;
+      const normMode = prev.cushionNormMode || 'percent';
+      const normPercent = prev.cushionNormPercent ?? 10;
+      const normFixedAmount = prev.cushionNormFixedAmount ?? 8265;
+
+      const newSchedule = generateDynamicCushionSchedule({
+        currentSalary: prev.currentSalary || 82650,
+        isDepositMade,
+        actualDepositAmount: newDeposit,
+        bankAccumulated: prev.cushionAccumulated || 8269.53,
+        startMonth: 8,
+        startYear: 2026,
+        normMode,
+        normPercent,
+        normFixedAmount,
+      });
+
+      return {
+        ...prev,
+        cushionMonthlyContribution: newDeposit,
+        safetyCushionDeposit: newDeposit,
+        actualCushionDepositThisMonth: newDeposit,
+        cushionSchedule: newSchedule,
+      };
+    });
+  };
+
+  // Mandatory Expenses handlers
+  const updateMandatoryExpense = (id: string, updated: Partial<MandatoryExpense>) => {
+    setState(prev => {
+      const updatedList = (prev.mandatoryExpenses || []).map(m =>
+        m.id === id ? { ...m, ...updated } : m
+      );
+      const newTarget = updatedList.reduce((sum, item) => sum + item.amount, 0) * 3;
+
+      return {
+        ...prev,
+        mandatoryExpenses: updatedList,
+        cushionTargetAmount: newTarget,
+      };
+    });
+  };
+
+  const addMandatoryExpense = (expense: Omit<MandatoryExpense, 'id'>) => {
+    const newM: MandatoryExpense = {
+      ...expense,
+      id: `m-${Date.now()}`,
+    };
+    setState(prev => {
+      const updatedList = [...(prev.mandatoryExpenses || []), newM];
+      const newTarget = updatedList.reduce((sum, item) => sum + item.amount, 0) * 3;
+
+      return {
+        ...prev,
+        mandatoryExpenses: updatedList,
+        cushionTargetAmount: newTarget,
+      };
+    });
+  };
+
+  const deleteMandatoryExpense = (id: string) => {
+    setState(prev => {
+      const updatedList = (prev.mandatoryExpenses || []).filter(m => m.id !== id);
+      const newTarget = updatedList.reduce((sum, item) => sum + item.amount, 0) * 3;
+
+      return {
+        ...prev,
+        mandatoryExpenses: updatedList,
+        cushionTargetAmount: newTarget,
+      };
+    });
+  };
+
+  const setMandatoryExpensesMode = (mode: 'manual' | 'auto') => {
+    setState(prev => ({
+      ...prev,
+      mandatoryExpensesMode: mode,
     }));
   };
 
   const updateBudgetSettings = (budget: number, rollover: number, cushionDeposit: number, salary: number) => {
-    setState(prev => ({
-      ...prev,
-      total30DaysBudget: budget,
-      previousMonthRemainder: rollover,
-      safetyCushionDeposit: cushionDeposit,
-      currentSalary: salary,
-    }));
+    setState(prev => {
+      const isDepositMade = prev.isCushionDepositDoneThisMonth ?? true;
+      const actualDeposit = prev.actualCushionDepositThisMonth ?? cushionDeposit;
+      const bankAccumulated = prev.cushionAccumulated ?? 8269.53;
+      const normMode = prev.cushionNormMode || 'percent';
+      const normPercent = prev.cushionNormPercent ?? 10;
+      const normFixedAmount = prev.cushionNormFixedAmount ?? 8265;
+
+      const newSchedule = generateDynamicCushionSchedule({
+        currentSalary: salary,
+        isDepositMade,
+        actualDepositAmount: actualDeposit,
+        bankAccumulated,
+        startMonth: 8,
+        startYear: 2026,
+        normMode,
+        normPercent,
+        normFixedAmount,
+      });
+
+      return {
+        ...prev,
+        total30DaysBudget: budget,
+        previousMonthRemainder: rollover,
+        safetyCushionDeposit: cushionDeposit,
+        cushionMonthlyContribution: cushionDeposit,
+        currentSalary: salary,
+        cushionSchedule: newSchedule,
+      };
+    });
   };
 
   // Ensure all days of a given month (1..31) are populated in state.days
@@ -889,8 +1542,8 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             dayOfWeekFull: DAY_NAMES_RU[dayOfWeekIdx],
             expenses: [],
             spent: 0,
-            normLimit: 1155.51,
-            deviation: 1155.51,
+            normLimit: 1859.46,
+            deviation: 1859.46,
             budgetRemainingOnDate: 0,
             totalRemaining: 0,
             isToday: dateStr === prev.todayDate,
@@ -931,22 +1584,18 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       nextYear += 1;
     }
 
-    const nextSalaryInfo = getSalaryDateInfo(nextYear, nextMonth, state.salaryDateDay || 5);
-    
-    let nextNextMonth = nextMonth + 1;
-    let nextNextYear = nextYear;
-    if (nextNextMonth > 12) {
-      nextNextMonth = 1;
-      nextNextYear += 1;
-    }
-    const nextNextSalaryInfo = getSalaryDateInfo(nextNextYear, nextNextMonth, state.salaryDateDay || 5);
+    const nextTemplate = generatePeriodTemplateForMonth(
+      nextYear,
+      nextMonth,
+      state.salaryDateDay || 5,
+      state.advanceDateDay || 20,
+      options?.targetDate
+    );
 
-    const newPeriodStartDate = options?.targetDate || nextSalaryInfo.salaryDateStr;
-    const newPeriodEndDate = nextNextSalaryInfo.salaryDateStr;
-
-    const formattedStart = `${nextSalaryInfo.actualSalaryDay.toString().padStart(2, '0')}.${nextMonth.toString().padStart(2, '0')}.${nextYear}`;
-    const formattedEnd = `${nextNextSalaryInfo.actualSalaryDay.toString().padStart(2, '0')}.${nextNextMonth.toString().padStart(2, '0')}.${nextNextYear}`;
-    const newPeriodTitle = `${formattedStart} — ${formattedEnd}`;
+    const newPeriodStartDate = options?.targetDate || nextTemplate.startDateStr;
+    const newPeriodEndDate = nextTemplate.endDateStr;
+    const newPeriodTitle = nextTemplate.formattedLabel;
+    const newAdvancePaymentDate = nextTemplate.advanceDateStr;
 
     // Recalculate total 30-day budget = salary + rollover - cushion
     const newTotalBudget = Math.round((newSalary + rolloverAmount - newCushion) * 100) / 100;
@@ -988,6 +1637,8 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         periodTitle: newPeriodTitle,
         periodStartDate: newPeriodStartDate,
         periodEndDate: newPeriodEndDate,
+        advancePaymentDate: newAdvancePaymentDate,
+        isAdvanceReceived: false,
         todayDate: newPeriodStartDate,
         currentSalary: newSalary,
         previousMonthRemainder: rolloverAmount,
@@ -1023,8 +1674,13 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         nextYear += 1;
       }
 
-      const nextSalaryInfo = getSalaryDateInfo(nextYear, nextMonth, state.salaryDateDay || 5);
-      const nextSalaryDateStr = nextSalaryInfo.salaryDateStr;
+      const nextTemplate = generatePeriodTemplateForMonth(
+        nextYear,
+        nextMonth,
+        state.salaryDateDay || 5,
+        state.advanceDateDay || 20
+      );
+      const nextSalaryDateStr = nextTemplate.startDateStr;
 
       // When today date arrives on or after the scheduled salary date, automatically roll over
       if (state.todayDate >= nextSalaryDateStr && state.periodStartDate < nextSalaryDateStr) {
@@ -1090,6 +1746,203 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...prev,
       pendingBankTransactions: (prev.pendingBankTransactions || []).filter(t => t.id !== transactionId),
     }));
+  };
+
+  // 2b. Confirm bank transaction as Planned Expense (does NOT deduct from 'Сегодня', updates PlannedItem)
+  const confirmPlannedBankTransaction = (transactionId: string, plannedItemId: string): { success: boolean; message: string } => {
+    let resultMessage = 'Операция успешно учтена в планах';
+    setState(prev => {
+      const tx = (prev.pendingBankTransactions || []).find(t => t.id === transactionId);
+      if (!tx) return prev;
+
+      const plannedItem = (prev.plannedItems || []).find(p => p.id === plannedItemId);
+      if (!plannedItem) return prev;
+
+      const isFuelOrProgress = plannedItem.isProgressTracked || plannedItem.title.toLowerCase().includes('бенз');
+
+      const updatedPlannedItems = (prev.plannedItems || []).map(p => {
+        if (p.id !== plannedItemId) return p;
+
+        if (isFuelOrProgress) {
+          const currentSpent = p.spentAmount || 0;
+          const newSpent = currentSpent + tx.amount;
+          return {
+            ...p,
+            spentAmount: newSpent,
+            isPaid: newSpent >= p.amount,
+          };
+        } else {
+          return {
+            ...p,
+            isPaid: true,
+          };
+        }
+      });
+
+      resultMessage = isFuelOrProgress
+        ? `Сумма ${formatRubles(tx.amount)} добавлена к расходу «${plannedItem.title}». Дневной лимит не затронут.`
+        : `Статья «${plannedItem.title}» отмечена как оплаченная. Дневной лимит не затронут.`;
+
+      return {
+        ...prev,
+        plannedItems: updatedPlannedItems,
+        pendingBankTransactions: (prev.pendingBankTransactions || []).filter(t => t.id !== transactionId),
+      };
+    });
+
+    return { success: true, message: resultMessage };
+  };
+
+  // ==========================================
+  // INCOMES & INFLOW ACTION HANDLERS
+  // ==========================================
+
+  // 1. Accept bank income into budget (increases total30DaysBudget and adds to incomes history)
+  const acceptBankIncomeToBudget = (transactionId: string, customCategory?: string, customTitle?: string) => {
+    setState(prev => {
+      const tx = (prev.pendingBankTransactions || []).find(t => t.id === transactionId);
+      if (!tx) return prev;
+
+      const newIncome: IncomeItem = {
+        id: `inc-bank-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        title: customTitle || tx.title,
+        amount: tx.amount,
+        date: tx.date || prev.todayDate,
+        time: tx.time || '12:00',
+        sourceType: 'bank_card',
+        sourceName: `${tx.bankName} ${tx.accountNumberMask}`,
+        category: customCategory || tx.categoryName || 'Поступление',
+        isIncludedInBudget: true,
+        isManual: false,
+        bankTransactionId: tx.id,
+        notes: tx.rawSnippet || 'Поступление на банковскую карту',
+        createdAt: new Date().toISOString(),
+      };
+
+      const updatedIncomes = [newIncome, ...(prev.incomes || [])];
+      const updatedTotalBudget = prev.total30DaysBudget + tx.amount;
+
+      let updatedSalary = prev.currentSalary;
+      const lowerTitle = (customTitle || tx.title).toLowerCase();
+      if (lowerTitle.includes('зарплат') || lowerTitle.includes('аванс')) {
+        updatedSalary += tx.amount;
+      }
+
+      return {
+        ...prev,
+        incomes: updatedIncomes,
+        total30DaysBudget: updatedTotalBudget,
+        currentSalary: updatedSalary,
+        pendingBankTransactions: (prev.pendingBankTransactions || []).filter(t => t.id !== transactionId),
+      };
+    });
+  };
+
+  // 2. Reject incoming bank transaction (dismiss without adding to budget)
+  const rejectBankIncome = (transactionId: string) => {
+    setState(prev => ({
+      ...prev,
+      pendingBankTransactions: (prev.pendingBankTransactions || []).filter(t => t.id !== transactionId),
+    }));
+  };
+
+  // 3. Add manual income (cash, freelance, gift, debt return, etc.)
+  const addManualIncome = (incomeData: Omit<IncomeItem, 'id' | 'createdAt'>) => {
+    setState(prev => {
+      const newIncome: IncomeItem = {
+        ...incomeData,
+        id: `inc-manual-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        createdAt: new Date().toISOString(),
+      };
+
+      const updatedIncomes = [newIncome, ...(prev.incomes || [])];
+      const updatedTotalBudget = incomeData.isIncludedInBudget 
+        ? prev.total30DaysBudget + incomeData.amount 
+        : prev.total30DaysBudget;
+
+      return {
+        ...prev,
+        incomes: updatedIncomes,
+        total30DaysBudget: updatedTotalBudget,
+      };
+    });
+  };
+
+  // 4. Toggle whether a specific income is included into 30-days budget
+  const toggleIncomeBudgetInclusion = (incomeId: string) => {
+    setState(prev => {
+      const target = (prev.incomes || []).find(i => i.id === incomeId);
+      if (!target) return prev;
+
+      const nextInclusion = !target.isIncludedInBudget;
+      const budgetDelta = nextInclusion ? target.amount : -target.amount;
+
+      const updatedIncomes = (prev.incomes || []).map(i => {
+        if (i.id === incomeId) {
+          return { ...i, isIncludedInBudget: nextInclusion };
+        }
+        return i;
+      });
+
+      return {
+        ...prev,
+        incomes: updatedIncomes,
+        total30DaysBudget: Math.max(0, prev.total30DaysBudget + budgetDelta),
+      };
+    });
+  };
+
+  // 5. Delete an income record
+  const deleteIncome = (incomeId: string) => {
+    setState(prev => {
+      const target = (prev.incomes || []).find(i => i.id === incomeId);
+      if (!target) return prev;
+
+      const budgetDelta = target.isIncludedInBudget ? -target.amount : 0;
+      const updatedIncomes = (prev.incomes || []).filter(i => i.id !== incomeId);
+
+      return {
+        ...prev,
+        incomes: updatedIncomes,
+        total30DaysBudget: Math.max(0, prev.total30DaysBudget + budgetDelta),
+      };
+    });
+  };
+
+  // 6. Edit an existing income record
+  const editIncome = (incomeId: string, updated: Partial<IncomeItem>) => {
+    setState(prev => {
+      const target = (prev.incomes || []).find(i => i.id === incomeId);
+      if (!target) return prev;
+
+      const oldEffectiveAmount = target.isIncludedInBudget ? target.amount : 0;
+      const newIsIncluded = updated.isIncludedInBudget !== undefined ? updated.isIncludedInBudget : target.isIncludedInBudget;
+      const newAmount = updated.amount !== undefined ? updated.amount : target.amount;
+      const newEffectiveAmount = newIsIncluded ? newAmount : 0;
+      const budgetDelta = newEffectiveAmount - oldEffectiveAmount;
+
+      const updatedIncomes = (prev.incomes || []).map(i => {
+        if (i.id === incomeId) {
+          return { ...i, ...updated };
+        }
+        return i;
+      });
+
+      return {
+        ...prev,
+        incomes: updatedIncomes,
+        total30DaysBudget: Math.max(0, prev.total30DaysBudget + budgetDelta),
+      };
+    });
+  };
+
+  // Confirm incoming transaction (legacy compatibility wrapper)
+  const confirmPendingIncome = (transactionId: string, isIncome: boolean) => {
+    if (isIncome) {
+      acceptBankIncomeToBudget(transactionId);
+    } else {
+      rejectBankIncome(transactionId);
+    }
   };
 
   // 3. Approve all pending bank transactions
@@ -1231,8 +2084,23 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     let categoryType: ExpenseCategory = 'прочее';
     let categoryName = 'Покупки';
     let title = 'Банковская покупка';
+    let txType: 'expense' | 'income' | 'transfer' | 'interest' = 'expense';
 
-    if (/магнит|пятерочка|перекресток|лента|вкусвилл|ашан|дикси|супермаркет|продукты/i.test(text)) {
+    if (/перевод от|зачисление|поступление|кэшбэк|cashback|зарплат|аванс|возврат/i.test(text)) {
+      txType = 'income';
+      categoryType = 'прочее';
+      categoryName = 'Поступление';
+      if (/кэшбэк|cashback/i.test(text)) {
+        categoryName = 'Кэшбэк';
+        title = 'Кэшбэк по карте';
+      } else if (/зарплат|аванс/i.test(text)) {
+        categoryName = 'Зарплата';
+        title = 'Зачисление зарплаты / аванса';
+      } else {
+        const senderMatch = text.match(/перевод\s+от\s+([А-Яа-яA-Za-z\s.]+?)(?:\.|\,|$|\s+баланс)/i);
+        title = senderMatch ? `Перевод от ${senderMatch[1].trim()}` : 'Входящий перевод на карту';
+      }
+    } else if (/магнит|пятерочка|перекресток|лента|вкусвилл|ашан|дикси|супермаркет|продукты/i.test(text)) {
       categoryType = 'продукты';
       categoryName = 'Супермаркет';
       const m = text.match(/(магнит|пятерочка|перекресток|лента|вкусвилл|ашан|дикси)/i);
@@ -1274,7 +2142,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       title,
       merchant: title,
       amount,
-      type: 'expense',
+      type: txType,
       categoryType,
       categoryName,
       date: state.todayDate,
@@ -1458,6 +2326,12 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         totalUnconfirmedCount,
         
         // Period & Salary Rollover
+        rollingPeriods,
+        currentPeriodTemplate,
+        selectedPeriodId,
+        setSelectedPeriodId,
+        activeViewingPeriod,
+        setPeriodByTemplate,
         salarySchedule,
         periodEndingRemainderInfo,
 
@@ -1468,10 +2342,18 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         pendingBankTransactionsCount,
         isBankSyncing,
 
+        // Incomes & Inflow Analysis
+        incomes,
+        pendingBankIncomes,
+        pendingBankIncomesCount,
+        pendingBankIncomesTotal,
+        totalIncludedAdditionalIncomes,
+
         // Advance & Correction metrics
         isAdvanceDateReached,
         unreachedPlannedExpenses,
         calculatedBudgetCorrection,
+        isBalanceSynced,
 
         // Core actions
         addExpenseToDate,
@@ -1481,25 +2363,59 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         confirmAllExpensesForDate,
         togglePlannedItemPaid,
         addPlannedItem,
+        updatePlannedItem,
         deletePlannedItem,
         updatePlannedItemProgress,
         addSpentToPlannedItem,
+        movePlannedToWishlist,
+        transferPlannedItemPeriod,
         applyBudgetCorrection,
+        applyBalanceSync,
         updateAdvanceSettings,
+
+        // Wishlist
         toggleWishlistPurchased,
         addWishlistItem,
+        updateWishlistItem,
         deleteWishlistItem,
+        clearPurchasedWishlist,
+        moveWishlistToPlanned,
+
+        // Cushion & Mandatory expenses
         depositToCushion,
+        withdrawFromCushion,
+        updateCushionAccumulated,
+        updateCashSavings,
+        updateCushionMonthlyContribution,
+        updateCurrentSalary,
+        setCushionDepositStatus,
+        updateActualCushionDepositThisMonth,
+        updateCushionNorm,
+        updateMandatoryExpense,
+        addMandatoryExpense,
+        deleteMandatoryExpense,
+        setMandatoryExpensesMode,
+
         updateBudgetSettings,
         startNewPeriod,
         ensureDaysForMonth,
         resetToDefaults,
 
+        // Income Actions
+        acceptBankIncomeToBudget,
+        rejectBankIncome,
+        addManualIncome,
+        toggleIncomeBudgetInclusion,
+        deleteIncome,
+        editIncome,
+
         // Banking actions
         approveBankTransaction,
         rejectBankTransaction,
+        confirmPlannedBankTransaction,
         approveAllPendingBankTransactions,
         rejectAllPendingBankTransactions,
+        confirmPendingIncome,
         syncBankAccounts,
         parseAndImportBankSnippet,
         reconcileCushionWithBank,

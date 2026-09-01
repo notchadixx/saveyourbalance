@@ -6,17 +6,37 @@ import {
   CushionMonthPlan, 
   MandatoryExpense,
   BankAccount,
-  BankTransaction 
+  BankTransaction,
+  IncomeItem
 } from './types';
+import { generatePeriodTemplateForMonth } from './utils/periodUtils';
+
+export function getTodayDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function getCurrentPeriodDates(baseSalaryDay: number = 5): { startDate: string; endDate: string; title: string } {
+  // Default to August 2026 budget period template (05.08.2026 — 03.09.2026)
+  const template = generatePeriodTemplateForMonth(2026, 8, baseSalaryDay, 20, '2026-08-26');
+  return {
+    startDate: template.startDateStr,
+    endDate: template.endDateStr,
+    title: template.formattedLabel,
+  };
+}
 
 const INITIAL_PLANNED_ITEMS: PlannedItem[] = [
-  { id: 'p1', title: 'Wildberries', amount: 6139.00, category: 'покупки', isPaid: true, notes: 'Одежда и бытовые мелочи' },
-  { id: 'p2', title: 'OZON', amount: 1472.00, category: 'покупки', isPaid: true, notes: 'Заказ товаров для дома' },
-  { id: 'p3', title: 'PS4', amount: 10000.00, category: 'игры_хобби', isPaid: true, notes: 'Игровая приставка' },
-  { id: 'p4', title: 'It takes two', amount: 2950.00, category: 'игры_хобби', isPaid: true, notes: 'Кооперативная игра' },
-  { id: 'p5', title: 'Геймпад', amount: 1250.00, category: 'игры_хобби', isPaid: true, notes: 'Дополнительный джойстик DualShock' },
-  { id: 'p6', title: 'МФУ', amount: 14299.00, category: 'покупки', isPaid: true, notes: 'Принтер/сканер для дома' },
-  { id: 'p7', title: 'Ростелеком', amount: 857.83, category: 'обязательные', isPaid: true, notes: 'Интернет + ТВ тариф' },
+  { id: 'p1', title: 'Wildberries', amount: 6139.00, category: 'покупки', isPaid: true, notes: 'Одежда и бытовые мелочи', period: 'current' },
+  { id: 'p2', title: 'OZON', amount: 1472.00, category: 'покупки', isPaid: true, notes: 'Заказ товаров для дома', period: 'current' },
+  { id: 'p3', title: 'PS4', amount: 10000.00, category: 'игры_хобби', isPaid: true, notes: 'Игровая приставка', period: 'current' },
+  { id: 'p4', title: 'It takes two', amount: 2950.00, category: 'игры_хобби', isPaid: true, notes: 'Кооперативная игра', period: 'current' },
+  { id: 'p5', title: 'Геймпад', amount: 1250.00, category: 'игры_хобби', isPaid: true, notes: 'Дополнительный джойстик DualShock', period: 'current' },
+  { id: 'p6', title: 'МФУ', amount: 14299.00, category: 'покупки', isPaid: true, notes: 'Принтер/сканер для дома', period: 'current' },
+  { id: 'p7', title: 'Ростелеком', amount: 857.83, category: 'обязательные', isPaid: true, notes: 'Интернет + ТВ тариф', period: 'current' },
   { 
     id: 'p8', 
     title: 'Бенз', 
@@ -25,17 +45,18 @@ const INITIAL_PLANNED_ITEMS: PlannedItem[] = [
     isProgressTracked: true, 
     category: 'авто', 
     isPaid: false, 
-    notes: 'Топливо на период (план 18 000 ₽ / факт 12 000 ₽, остаток 6 000 ₽)' 
+    period: 'current',
+    notes: 'Топливо на расчетный период' 
   },
-  { id: 'p9', title: 'DDX', amount: 1900.00, category: 'обязательные', isPaid: true, notes: 'Фитнес-клуб месячный абонемент' },
-  { id: 'p10', title: 'Джоггеры зимние', amount: 3981.00, category: 'покупки', isPaid: true, notes: 'Теплая одежда на осень-зиму' },
-  { id: 'p11', title: 'Полка навесная', amount: 4610.00, category: 'покупки', isPaid: true, notes: 'Мебель для комнаты' },
-  { id: 'p12', title: 'Сход-развал', amount: 2000.00, category: 'авто', isPaid: true, notes: 'Техническое обслуживание подвески' },
-  { id: 'p13', title: 'Наконечник рулевой тяги', amount: 1635.00, category: 'авто', isPaid: true, notes: 'Запчасть для автомобиля' },
-  { id: 'p14', title: 'Новоселье (еда + напитки)', amount: 8147.04, category: 'мероприятия', isPaid: true, notes: 'Празднование новоселья с друзьями' },
-  { id: 'p15', title: 'Подарок Соне', amount: 2500.00, category: 'мероприятия', isPaid: true, notes: 'Подарок на день рождения' },
-  { id: 'p16', title: 'Корректировка', amount: 336.60, category: 'прочее', isPaid: true, notes: 'Банковские комиссии и округления' },
-  { id: 'p17', title: 'Билеты на поезд', amount: 12782.00, category: 'мероприятия', isPaid: true, notes: 'Поездка туда и обратно' },
+  { id: 'p9', title: 'DDX', amount: 1900.00, category: 'обязательные', isPaid: true, notes: 'Фитнес-клуб месячный абонемент', period: 'current' },
+  { id: 'p10', title: 'Джоггеры зимние', amount: 3981.00, category: 'покупки', isPaid: true, notes: 'Теплая одежда на осень-зиму', period: 'current' },
+  { id: 'p11', title: 'Полка навесная', amount: 4610.00, category: 'покупки', isPaid: true, notes: 'Мебель для комнаты', period: 'current' },
+  { id: 'p12', title: 'Сход-развал', amount: 2000.00, category: 'авто', isPaid: true, notes: 'Техническое обслуживание подвески', period: 'current' },
+  { id: 'p13', title: 'Наконечник рулевой тяги', amount: 1635.00, category: 'авто', isPaid: true, notes: 'Запчасть для автомобиля', period: 'current' },
+  { id: 'p14', title: 'Новоселье (еда + напитки)', amount: 8147.04, category: 'мероприятия', isPaid: true, notes: 'Празднование новоселья с друзьями', period: 'current' },
+  { id: 'p15', title: 'Подарок Соне', amount: 2500.00, category: 'мероприятия', isPaid: true, notes: 'Подарок на день рождения', period: 'current' },
+  { id: 'p16', title: 'Корректировка', amount: 336.60, category: 'прочее', isPaid: true, notes: 'Банковские комиссии и округления', period: 'current' },
+  { id: 'p17', title: 'Билеты на поезд', amount: 12782.00, category: 'мероприятия', isPaid: true, notes: 'Поездка туда и обратно', period: 'current' },
 ];
 
 const INITIAL_WISHLIST: WishlistItem[] = [
@@ -223,11 +244,58 @@ const RAW_DAILY_EXPENSES = [
       { title: 'Минеральная вода', amount: 55.00, category: 'продукты', catName: 'Магнит' },
     ] 
   },
-  { date: '2026-08-27', dayNumber: 27, dayOfWeekShort: 'Чт', dayOfWeekFull: 'Четверг', spent: 0.00, items: [] },
-  { date: '2026-08-28', dayNumber: 28, dayOfWeekShort: 'Пт', dayOfWeekFull: 'Пятница', spent: 0.00, items: [] },
-  { date: '2026-08-29', dayNumber: 29, dayOfWeekShort: 'Сб', dayOfWeekFull: 'Суббота', spent: 0.00, items: [] },
-  { date: '2026-08-30', dayNumber: 30, dayOfWeekShort: 'Вс', dayOfWeekFull: 'Воскресенье', spent: 0.00, items: [] },
-  { date: '2026-08-31', dayNumber: 31, dayOfWeekShort: 'Пн', dayOfWeekFull: 'Понедельник', spent: 0.00, items: [] },
+  { 
+    date: '2026-08-27', 
+    dayNumber: 27, 
+    dayOfWeekShort: 'Чт', 
+    dayOfWeekFull: 'Четверг', 
+    spent: 380.00, 
+    items: [
+      { title: 'Бизнес-ланч и напиток', amount: 380.00, category: 'еда_вне_дома', catName: 'Кафе' }
+    ] 
+  },
+  { 
+    date: '2026-08-28', 
+    dayNumber: 28, 
+    dayOfWeekShort: 'Пт', 
+    dayOfWeekFull: 'Пятница', 
+    spent: 1240.00, 
+    items: [
+      { title: 'Ужин и пицца', amount: 980.00, category: 'еда_вне_дома', catName: 'Додо Пицца' },
+      { title: 'Кофе с собой', amount: 260.00, category: 'еда_вне_дома', catName: 'Surf Coffee' }
+    ] 
+  },
+  { 
+    date: '2026-08-29', 
+    dayNumber: 29, 
+    dayOfWeekShort: 'Сб', 
+    dayOfWeekFull: 'Суббота', 
+    spent: 890.00, 
+    items: [
+      { title: 'Супермаркет Пятерочка', amount: 890.00, category: 'продукты', catName: 'Пятерочка' }
+    ] 
+  },
+  { 
+    date: '2026-08-30', 
+    dayNumber: 30, 
+    dayOfWeekShort: 'Вс', 
+    dayOfWeekFull: 'Воскресенье', 
+    spent: 310.00, 
+    items: [
+      { title: 'Аптека витамины', amount: 310.00, category: 'здоровье', catName: 'Аптека Ригла' }
+    ] 
+  },
+  { 
+    date: '2026-08-31', 
+    dayNumber: 31, 
+    dayOfWeekShort: 'Пн', 
+    dayOfWeekFull: 'Понедельник', 
+    spent: 560.00, 
+    items: [
+      { title: 'Обед в столовой', amount: 360.00, category: 'еда_вне_дома', catName: 'Столовая' },
+      { title: 'Магнит перекус', amount: 200.00, category: 'продукты', catName: 'Магнит' }
+    ] 
+  },
   { date: '2026-09-01', dayNumber: 1, dayOfWeekShort: 'Вт', dayOfWeekFull: 'Вторник', spent: 0.00, items: [] },
   { date: '2026-09-02', dayNumber: 2, dayOfWeekShort: 'Ср', dayOfWeekFull: 'Среда', spent: 0.00, items: [] },
   { date: '2026-09-03', dayNumber: 3, dayOfWeekShort: 'Чт', dayOfWeekFull: 'Четверг', spent: 0.00, items: [] },
@@ -235,14 +303,15 @@ const RAW_DAILY_EXPENSES = [
 ];
 
 export function buildInitialDays(): DayRecord[] {
-  const normLimit = 1155.51;
+  const normLimit = 1859.46;
+  const today = getTodayDateString();
   let runningRemainder = 34665.22;
   let cumulativeAccumulated = 0;
 
-  return RAW_DAILY_EXPENSES.map((raw, idx) => {
-    const isPastOrToday = raw.date <= '2026-08-26';
-    const isPast = raw.date < '2026-08-26';
-    const isToday = raw.date === '2026-08-26';
+  return RAW_DAILY_EXPENSES.map((raw) => {
+    const isPast = raw.date < today;
+    const isToday = raw.date === today;
+    const isPastOrToday = raw.date <= today;
     const deviation = normLimit - raw.spent;
     
     if (isPastOrToday) {
@@ -250,6 +319,7 @@ export function buildInitialDays(): DayRecord[] {
       runningRemainder -= raw.spent;
     }
 
+    // Recorded expenses for dates with spend
     const expensesList = raw.items.map((item, itemIdx) => ({
       id: `exp-${raw.date}-${itemIdx}`,
       title: item.title,
@@ -257,7 +327,7 @@ export function buildInitialDays(): DayRecord[] {
       category: item.catName,
       categoryType: item.category as any,
       time: itemIdx === 0 ? '13:20' : itemIdx === 1 ? '15:45' : '17:30',
-      isConfirmed: raw.date !== '2026-08-26', // Today's expenses are pending confirmation
+      isConfirmed: true,
     }));
 
     return {
@@ -265,7 +335,7 @@ export function buildInitialDays(): DayRecord[] {
       dayNumber: raw.dayNumber,
       dayOfWeekShort: raw.dayOfWeekShort,
       dayOfWeekFull: raw.dayOfWeekFull,
-      expenses: expensesList,
+      expenses: raw.items.length > 0 ? expensesList : [],
       spent: raw.spent,
       normLimit: normLimit,
       deviation: deviation,
@@ -277,50 +347,89 @@ export function buildInitialDays(): DayRecord[] {
   });
 }
 
-export function buildCushionSchedule(): CushionMonthPlan[] {
+export function buildCushionSchedule(
+  currentSalary: number = 82650.00,
+  isDepositMade: boolean = true,
+  actualDepositAmount: number = 8265.00,
+  bankAccumulated: number = 8269.53,
+  startMonth: number = 8,
+  startYear: number = 2026,
+  normMode: 'percent' | 'fixed' = 'percent',
+  normPercent: number = 10,
+  normFixedAmount: number = 8265.00
+): CushionMonthPlan[] {
   const schedule: CushionMonthPlan[] = [];
-  const depositRate = 8265.00; // 10% of 82650
+  const monthlyNorm = normMode === 'fixed' 
+    ? normFixedAmount 
+    : Math.round(currentSalary * (normPercent / 100) * 100) / 100;
 
-  // 2026
-  const y2026 = ['Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-  y2026.forEach((m, idx) => {
-    schedule.push({
-      year: 2026,
-      monthName: m,
-      targetAccumulated: 8265.00 * (idx + 1),
-      monthlyDeposit: idx === 0 ? 8265.00 : 0,
-      rateInfo: idx === 0 ? 'Сбер 10% / Альфа 13.5%' : '',
-      capitalization: idx === 0 ? 4.53 : 0,
-      expense: 0,
-      balance: idx === 0 ? 8269.53 : 0,
-      deviation: idx === 0 ? 4.53 : 0,
-    });
-  });
-
-  // 2027 to 2030 projections
-  const years = [2027, 2028, 2029, 2030];
   const allMonths = [
     'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
     'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
   ];
 
-  let runningTarget = 43795.00;
-  years.forEach(year => {
-    allMonths.forEach(m => {
-      runningTarget += depositRate;
+  // Month 0 (August 2026) target:
+  // If deposit made: target = actualDepositAmount (includes difference from norm)
+  // If deposit not made: target = monthlyNorm
+  const targetMonth0 = isDepositMade ? actualDepositAmount : monthlyNorm;
+
+  let currentY = startYear;
+  let currentM = startMonth;
+  let runningTarget = targetMonth0;
+
+  const TOTAL_MONTHS = 48; // 4 years projection
+
+  for (let i = 0; i < TOTAL_MONTHS; i++) {
+    const monthName = allMonths[currentM - 1];
+
+    if (i === 0) {
+      // Current month (August 2026): filled because contribution is already deposited
+      const depositThisMonth = isDepositMade ? actualDepositAmount : 0;
+      const balanceThisMonth = isDepositMade ? bankAccumulated : 0;
+      const capitalizationThisMonth = isDepositMade
+        ? Math.max(0, Math.round((bankAccumulated - depositThisMonth) * 100) / 100) || 4.53
+        : 0;
+      const deviationThisMonth = isDepositMade
+        ? Math.round((balanceThisMonth - targetMonth0) * 100) / 100
+        : -targetMonth0;
+
       schedule.push({
-        year,
-        monthName: m,
+        year: currentY,
+        monthName,
+        targetAccumulated: targetMonth0,
+        monthlyDeposit: depositThisMonth,
+        rateInfo: '13.5%',
+        capitalization: capitalizationThisMonth,
+        expense: 0,
+        balance: balanceThisMonth,
+        deviation: deviationThisMonth,
+      });
+
+      runningTarget = targetMonth0;
+    } else {
+      // Future months: Цель на период = Цель(предыдущего месяца) + норма от зарплаты (или фикс)
+      runningTarget = Math.round((runningTarget + monthlyNorm) * 100) / 100;
+
+      // Only "Цель на период" is filled for future rows; other columns remain empty/unfilled
+      schedule.push({
+        year: currentY,
+        monthName,
         targetAccumulated: runningTarget,
         monthlyDeposit: 0,
-        rateInfo: '',
+        rateInfo: '—',
         capitalization: 0,
         expense: 0,
         balance: 0,
         deviation: 0,
       });
-    });
-  });
+    }
+
+    currentM++;
+    if (currentM > 12) {
+      currentM = 1;
+      currentY++;
+    }
+  }
 
   return schedule;
 }
@@ -335,7 +444,7 @@ export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
     accountName: 'Black Дебетовая',
     accountNumberMask: '•4821',
     balance: 24810.00,
-    lastSyncedAt: '2026-08-26T17:40:00Z',
+    lastSyncedAt: new Date().toISOString(),
     isConnected: true,
     color: '#fed838',
   },
@@ -347,7 +456,7 @@ export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
     accountName: 'СберКарта Основная',
     accountNumberMask: '•9022',
     balance: 6240.00,
-    lastSyncedAt: '2026-08-26T17:35:00Z',
+    lastSyncedAt: new Date().toISOString(),
     isConnected: true,
     color: '#21a038',
   },
@@ -360,7 +469,7 @@ export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
     accountNumberMask: '•3312',
     balance: 8269.53,
     interestRate: 13.5,
-    lastSyncedAt: '2026-08-26T17:00:00Z',
+    lastSyncedAt: new Date().toISOString(),
     isConnected: true,
     color: '#ef3124',
   },
@@ -379,7 +488,7 @@ export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
     type: 'expense',
     categoryType: 'продукты',
     categoryName: 'Супермаркет',
-    date: '2026-08-26',
+    date: getTodayDateString(),
     time: '14:15',
     status: 'pending',
     rawSnippet: 'Т-Банк. Покупка 640.00 ₽, ВкусВилл. Карта •4821',
@@ -395,7 +504,7 @@ export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
     type: 'expense',
     categoryType: 'транспорт',
     categoryName: 'Такси',
-    date: '2026-08-26',
+    date: getTodayDateString(),
     time: '16:40',
     status: 'pending',
     rawSnippet: 'Т-Банк. Покупка 380.00 ₽, Yandex Go. Карта •4821',
@@ -411,44 +520,139 @@ export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
     type: 'expense',
     categoryType: 'здоровье',
     categoryName: 'Аптека',
-    date: '2026-08-26',
+    date: getTodayDateString(),
     time: '17:05',
     status: 'pending',
     rawSnippet: 'СберБанк: Покупка 420р Аптека Ригла. Баланс 6240р',
   },
+  {
+    id: 'tx-inc-1',
+    bankAccountId: 'bank-tbank-card',
+    bankName: 'Т-Банк',
+    accountNumberMask: '•4821',
+    title: 'Перевод от Александра В. (Возврат долга)',
+    merchant: 'СБП Перевод',
+    amount: 2500.00,
+    type: 'income',
+    categoryType: 'прочее',
+    categoryName: 'Перевод',
+    date: getTodayDateString(),
+    time: '11:30',
+    status: 'pending',
+    rawSnippet: 'Т-Банк. Перевод +2 500.00 ₽ от Александр В. (СБП)',
+  },
+  {
+    id: 'tx-inc-2',
+    bankAccountId: 'bank-sber-card',
+    bankName: 'СберБанк',
+    accountNumberMask: '•9022',
+    title: 'Кэшбэк и бонусы за прошлый месяц',
+    merchant: 'СберСпасибо',
+    amount: 840.00,
+    type: 'income',
+    categoryType: 'прочее',
+    categoryName: 'Кэшбэк',
+    date: getTodayDateString(),
+    time: '09:00',
+    status: 'pending',
+    rawSnippet: 'СберБанк. Зачисление кэшбэка +840.00 ₽',
+  },
+  {
+    id: 'tx-inc-3',
+    bankAccountId: 'bank-tbank-card',
+    bankName: 'Т-Банк',
+    accountNumberMask: '•4821',
+    title: 'Поступление от Авито (Продажа монитора)',
+    merchant: 'Avito Доставка',
+    amount: 5400.00,
+    type: 'income',
+    categoryType: 'прочее',
+    categoryName: 'Продажа',
+    date: getTodayDateString(),
+    time: '14:20',
+    status: 'pending',
+    rawSnippet: 'Т-Банк. Зачисление +5 400.00 ₽ Avito Заказ',
+  },
 ];
 
+export const INITIAL_INCOMES: IncomeItem[] = [
+  {
+    id: 'inc-init-1',
+    title: 'Подработка (Консультация по дизайну)',
+    amount: 6000.00,
+    date: '2026-08-15',
+    time: '18:00',
+    sourceType: 'freelance',
+    sourceName: 'СБП Перевод',
+    category: 'Подработка',
+    isIncludedInBudget: true,
+    isManual: true,
+    notes: 'Оплата за аудит мобильного интерфейса',
+    createdAt: '2026-08-15T18:00:00Z',
+  },
+  {
+    id: 'inc-init-2',
+    title: 'Возврат долга наличными от Сергея',
+    amount: 3000.00,
+    date: '2026-08-22',
+    time: '15:30',
+    sourceType: 'cash',
+    sourceName: 'Наличные',
+    category: 'Возврат долга',
+    isIncludedInBudget: true,
+    isManual: true,
+    notes: 'Наличные переданы при встрече',
+    createdAt: '2026-08-22T15:30:00Z',
+  }
+];
+
+const periodData = getCurrentPeriodDates(5);
+
 export const INITIAL_BUDGET_STATE: BudgetState = {
-  periodTitle: '05.08.2026 — 04.09.2026',
-  periodStartDate: '2026-08-05',
-  periodEndDate: '2026-09-04',
-  todayDate: '2026-08-26',
+  periodTitle: periodData.title,
+  periodStartDate: periodData.startDate,
+  periodEndDate: periodData.endDate,
+  todayDate: getTodayDateString(),
   
   // Advance and salary timeline
   salaryDateDay: 5,
   advanceDateDay: 20,
-  advancePaymentDate: '2026-08-20',
+  advancePaymentDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-20`,
   estimatedAdvanceAmount: 40000.00, // Предполагаемый аванс 20-го числа
+  isAdvanceReceived: new Date().getDate() >= 20,
   
   total30DaysBudget: 135789.69,
   previousMonthRemainder: 11803.76,
   safetyCushionDeposit: 8265.00,
   currentSalary: 82650.00,
   
+  isBalanceSynced: false,
+  
   plannedItems: INITIAL_PLANNED_ITEMS,
   days: buildInitialDays(),
   wishlist: INITIAL_WISHLIST,
   
   cushionAccumulated: 8269.53,
-  cushionTargetAmount: 163294.11, // 3 months of ~54431.37
+  cushionCash: 15000.00, // Учет наличных сбережений
+  cushionTargetAmount: 163294.11, // 3 месяца
   cushionTargetMonthsCount: 3,
+  cushionMonthlyContribution: 8265.00,
   mandatoryExpenses: INITIAL_MANDATORY_EXPENSES,
-  cushionSchedule: buildCushionSchedule(),
+  mandatoryExpensesMode: 'manual',
+  isCushionDepositDoneThisMonth: true,
+  actualCushionDepositThisMonth: 8265.00,
+  cushionNormMode: 'percent',
+  cushionNormPercent: 10,
+  cushionNormFixedAmount: 8265.00,
+  cushionSchedule: buildCushionSchedule(82650.00, true, 8265.00, 8269.53, 8, 2026, 'percent', 10, 8265.00),
   
   // Banking integration data
   bankAccounts: INITIAL_BANK_ACCOUNTS,
   pendingBankTransactions: INITIAL_PENDING_TRANSACTIONS,
-  lastBankSyncTimestamp: '2026-08-26T17:40:00Z',
+  lastBankSyncTimestamp: new Date().toISOString(),
+  
+  // Incomes & Additional inflows
+  incomes: INITIAL_INCOMES,
   
   isMobileFrame: false,
 };

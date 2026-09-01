@@ -68,7 +68,7 @@ export function getSalaryDateInfo(year: number, month: number, baseDay: number =
 /**
  * Generates all day records for a specific year and month
  */
-export function generateMonthDays(year: number, month: number, dailyNorm: number = 1155.51) {
+export function generateMonthDays(year: number, month: number, dailyNorm: number = 1859.46) {
   const daysInMonth = new Date(year, month, 0).getDate();
   const formattedMonth = month.toString().padStart(2, '0');
   const days = [];

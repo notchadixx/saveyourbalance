@@ -34,7 +34,7 @@ const WEEK_DAYS_HEADER = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'
 interface MonthCalendarNavigatorProps {}
 
 export const MonthCalendarNavigator: React.FC<MonthCalendarNavigatorProps> = () => {
-  const { state, selectedDate, setSelectedDate, ensureDaysForMonth, salarySchedule } = useBudget();
+  const { state, selectedDate, setSelectedDate, ensureDaysForMonth, salarySchedule, baseDailyNorm } = useBudget();
 
   // Parse current selected date into year, month, day
   const [selectedYear, setSelectedYear] = useState<number>(() => {
@@ -294,7 +294,7 @@ export const MonthCalendarNavigator: React.FC<MonthCalendarNavigatorProps> = () 
             const isSelected = day.date === selectedDate;
             const isToday = day.date === state.todayDate;
             const hasSpending = day.spent > 0;
-            const isOverLimit = day.spent > day.normLimit;
+            const isOverLimit = day.spent > baseDailyNorm;
 
             return (
               <button
