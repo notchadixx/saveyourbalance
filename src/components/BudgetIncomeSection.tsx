@@ -133,45 +133,46 @@ export const BudgetIncomeSection: React.FC = () => {
         {/* Action Button: Manual Income */}
         <button
           onClick={() => handleOpenAddManual('cash')}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>Внести поступление</span>
+          <span className="hidden xs:inline">Внести поступление</span>
+          <span className="xs:hidden">Внести</span>
         </button>
       </div>
 
       {/* 2. Key Metrics Summary Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-        <div className="p-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)]">
-          <span className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider block mb-0.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
+        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] min-w-0 overflow-hidden">
+          <span className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider block mb-0.5 truncate">
             Учтено в бюджете
           </span>
-          <span className="text-base sm:text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
+          <span className="text-sm sm:text-lg font-extrabold text-emerald-600 dark:text-emerald-400 block truncate">
             +{formatRubles(totalIncludedAdditionalIncomes, { showCents: false })}
           </span>
         </div>
 
-        <div className="p-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)]">
-          <span className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider block mb-0.5">
+        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] min-w-0 overflow-hidden">
+          <span className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider block mb-0.5 truncate">
             Ожидают решения
           </span>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-base sm:text-lg font-extrabold text-[var(--color-text-main)]">
-              {pendingBankIncomesCount} {pendingBankIncomesCount === 1 ? 'операция' : 'операций'}
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm sm:text-base font-extrabold text-[var(--color-text-main)] truncate">
+              {pendingBankIncomesCount} {pendingBankIncomesCount === 1 ? 'операция' : pendingBankIncomesCount > 1 && pendingBankIncomesCount < 5 ? 'операции' : 'операций'}
             </span>
             {pendingBankIncomesTotal > 0 && (
-              <span className="text-xs font-bold text-[var(--color-accent)]">
-                ({formatRubles(pendingBankIncomesTotal, { showCents: false })})
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                +{formatRubles(pendingBankIncomesTotal, { showCents: false })}
               </span>
             )}
           </div>
         </div>
 
-        <div className="hidden sm:block p-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)]">
-          <span className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider block mb-0.5">
+        <div className="hidden sm:block p-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] min-w-0 overflow-hidden">
+          <span className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider block mb-0.5 truncate">
             Всего доходов
           </span>
-          <span className="text-base sm:text-lg font-bold text-[var(--color-text-secondary)]">
+          <span className="text-base sm:text-lg font-bold text-[var(--color-text-secondary)] block truncate">
             {incomes.length} записей
           </span>
         </div>
@@ -281,30 +282,31 @@ export const BudgetIncomeSection: React.FC = () => {
                     </div>
 
                     {/* Right side: Amount & Accept/Reject Controls */}
-                    <div className="flex items-center justify-between sm:justify-end gap-3 pl-13 sm:pl-0">
-                      <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                    <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-[var(--color-border-subtle)]">
+                      <span className="text-sm sm:text-base font-extrabold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                         +{formatRubles(tx.amount)}
                       </span>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         {/* Reject button */}
                         <button
                           onClick={() => rejectBankIncome(tx.id)}
-                          className="px-2.5 py-1.5 rounded-xl bg-[var(--color-bg-card-subtle)] hover:bg-rose-500/15 text-[var(--color-text-muted)] hover:text-rose-600 dark:hover:text-rose-400 border border-[var(--color-border-subtle)] hover:border-rose-500/30 transition-all text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                          className="px-2 sm:px-2.5 py-1.5 rounded-xl bg-[var(--color-bg-card-subtle)] hover:bg-rose-500/15 text-[var(--color-text-muted)] hover:text-rose-600 dark:hover:text-rose-400 border border-[var(--color-border-subtle)] hover:border-rose-500/30 transition-all text-xs font-semibold flex items-center gap-1 cursor-pointer shrink-0"
                           title="Отклонить (не учитывать в бюджете)"
                         >
                           <X className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Отклонить</span>
+                          <span className="hidden xs:inline">Отклонить</span>
                         </button>
 
                         {/* Accept into Budget button */}
                         <button
                           onClick={() => handleAcceptIncome(tx.id)}
-                          className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition-all text-xs font-bold flex items-center gap-1.5 shadow-xs active:scale-95 cursor-pointer"
+                          className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition-all text-xs font-bold flex items-center gap-1.5 shadow-xs active:scale-95 cursor-pointer shrink-0 whitespace-nowrap"
                           title="Принять и суммировать с бюджетом"
                         >
                           <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                          <span>Учесть в бюджет</span>
+                          <span className="hidden sm:inline">Учесть в бюджет</span>
+                          <span className="sm:hidden">Учесть</span>
                         </button>
                       </div>
                     </div>
@@ -376,7 +378,7 @@ export const BudgetIncomeSection: React.FC = () => {
                     </div>
 
                     {/* Right side: Toggle Inclusion & Delete */}
-                    <div className="flex items-center justify-between sm:justify-end gap-3 pl-13 sm:pl-0">
+                    <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-[var(--color-border-subtle)]">
                       <div className="flex flex-col items-end">
                         <span className={`text-sm sm:text-base font-extrabold whitespace-nowrap ${
                           inc.isIncludedInBudget ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--color-text-muted)] line-through'

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useBudget, formatRubles } from '../context/BudgetContext';
+import { useBudget, formatRubles, getTodayDateString } from '../context/BudgetContext';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -120,7 +120,7 @@ export const MonthCalendarNavigator: React.FC<MonthCalendarNavigatorProps> = () 
 
   // Quick jump to today
   const handleJumpToToday = () => {
-    const today = state.todayDate || '2026-08-26';
+    const today = state.todayDate || getTodayDateString();
     const parts = today.split('-');
     setSelectedYear(parseInt(parts[0], 10));
     setSelectedMonth(parseInt(parts[1], 10));

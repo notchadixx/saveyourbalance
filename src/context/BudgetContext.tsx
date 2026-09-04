@@ -12,11 +12,21 @@ import {
   MandatoryExpense,
   CushionMonthPlan,
   IncomeItem,
-  IncomeSourceType
+  IncomeSourceType,
+  FinancialProfile,
+  CreditCard,
+  SuggestedRegularExpense,
+  PaymentDateOptimizationAdvice,
+  FoodItem,
+  FoodControlState,
+  FoodControlMode,
+  MarketplaceOrder,
+  MarketplaceSyncState
 } from '../types';
-import { INITIAL_BUDGET_STATE } from '../mockData';
+import { INITIAL_BUDGET_STATE, getTodayDateString, buildCushionSchedule } from '../mockData';
 import { useAuth } from './AuthContext';
-import { db, doc, setDoc, onSnapshot } from '../lib/firebase';
+import { useProfile } from './ProfileContext'; // <-- ДОБАВЛЕНО
+import { db, doc, safeSetDoc, onSnapshot } from '../lib/firebase';
 import { getSalaryDateInfo, SalaryScheduleInfo, generateMonthDays } from '../utils/salaryUtils';
 import { 
   PeriodTemplate, 
@@ -24,6 +34,16 @@ import {
   generatePeriodTemplateForMonth, 
   findPeriodTemplateForDate 
 } from '../utils/periodUtils';
+import { buildInitialStateFromProfile } from '../utils/profileBudgetBuilder'; // <-- ДОБАВЛЕНО
+import { 
+  analyzeBankTransactionsForRegularExpenses, 
+  analyzePaymentDates 
+} from '../utils/regularExpenseAnalyzer';
+import {
+  calculateBasketTotal,
+  calculateTotalFoodSpentInPeriod,
+  generateDefaultFoodPriceHistory
+} from '../utils/foodBasketUtils';
 
 const STORAGE_KEY = 'daily_limit_budget_app_state_v3';
 
@@ -148,6 +168,7 @@ export interface BudgetContextType {
 
   updateBudgetSettings: (budget: number, rollover: number, cushionDeposit: number, salary: number) => void;
   startNewPeriod: (options?: { newSalary?: number; targetDate?: string; customRollover?: number }) => { success: boolean; message: string; rolloverAmount: number };
+  receiveSalary: (amount?: number) => void;
   ensureDaysForMonth: (year: number, month: number) => void;
   resetToDefaults: () => void;
 
@@ -174,6 +195,57 @@ export interface BudgetContextType {
   updateBankAccountBalance: (accountId: string, newBalance: number) => void;
   addBankAccount: (account: Omit<BankAccount, 'id'>) => void;
   removeBankAccount: (id: string) => void;
+
+  // Credit Cards Actions
+  addCreditCard: (card: Omit<CreditCard, 'id' | 'lastUpdated'>) => void;
+  updateCreditCard: (id: string, updated: Partial<CreditCard>) => void;
+  removeCreditCard: (id: string) => void;
+  updateCreditCardDebt: (id: string, newDebt: number) => void;
+  refreshCreditCardGracePeriod: (id: string, newGraceDate?: string) => void;
+
+  // Regular Expenses AI Actions
+  analyzeRegularExpenses: () => SuggestedRegularExpense[];
+  applySuggestedPlans: (suggestions: SuggestedRegularExpense[]) => void;
+  setRegularExpensesAnalyzed: (status?: boolean) => void;
+  ignoreMerchant: (merchant: string) => void;
+  togglePlannedItemAutoRenew: (id: string) => void;
+  getPaymentDateAdvice: () => PaymentDateOptimizationAdvice;
+
+  // Food & Groceries Management Actions
+  setFoodControl: (config: FoodControlState) => void;
+  setFoodMode: (mode: FoodControlMode) => void;
+  updateBasketItem: (id: string, updated: Partial<FoodItem>) => void;
+  addBasketItem: (item: Omit<FoodItem, 'id' | 'lastUpdated'>) => void;
+  removeBasketItem: (id: string) => void;
+  updateFoodLimit: (limit: number) => void;
+  syncFoodPlanWithBudget: () => void;
+  totalFoodSpentThisPeriod: number;
+
+  // Marketplace Sync Actions (WB & OZON)
+  connectMarketplace: (marketplace: 'wildberries' | 'ozon') => void;
+  disconnectMarketplace: (marketplace: 'wildberries' | 'ozon') => void;
+  syncMarketplaceOrders: () => void;
+  cancelMarketplaceOrder: (orderId: string) => void;
+  receiveMarketplaceOrder: (orderId: string) => void;
+  recordMarketplaceWalletTopup: (marketplace: 'wildberries' | 'ozon', amount: number) => void;
+
+  // Profile & Data Management
+  updateUserProfile: (settings: { userName?: string; currency?: string; includeAdvanceInBudget?: boolean }) => void;
+  updateFinancialProfileState: (settings: {
+    salaryDateDay: number;
+    advanceDateDay?: number;
+    currentSalary?: number;
+    hasAdvance?: boolean;
+    cushionNormMode?: 'percent' | 'fixed';
+    cushionNormPercent?: number;
+    cushionNormFixedAmount?: number;
+    includeAdvanceInBudget?: boolean;
+    advanceTreatment?: 'include' | 'separate';
+  }) => void;
+  importBudgetState: (newState: BudgetState) => { success: boolean; message: string };
+
+  // <-- ДОБАВЛЕНО: метод инициализации из профиля
+  initializeBudgetFromProfile: (profile: FinancialProfile) => void;
 }
 
 // Monthly cushion norm calculator
@@ -289,12 +361,215 @@ export function generateDynamicCushionSchedule(params: {
 
   return schedule;
 }
+
+/**
+ * Computes the clean unspent remainder from the last day of the previous period.
+ */
+export function calculateCleanRemainderFromPreviousPeriod(
+  days: DayRecord[],
+  prevPeriodStart?: string,
+  prevPeriodEnd?: string,
+  fallbackAmount: number = 11803.76
+): number {
+  if (!days || days.length === 0) return fallbackAmount;
+
+  const prevDays = days.filter(d => 
+    (!prevPeriodStart || d.date >= prevPeriodStart) && 
+    (!prevPeriodEnd || d.date <= prevPeriodEnd)
+  ).sort((a, b) => a.date.localeCompare(b.date));
+
+  if (prevDays.length === 0) return fallbackAmount;
+
+  const lastDay = prevDays[prevDays.length - 1];
+
+  if (typeof lastDay.totalRemaining === 'number' && !isNaN(lastDay.totalRemaining) && lastDay.totalRemaining > 0) {
+    return Math.round(lastDay.totalRemaining * 100) / 100;
+  }
+  if (typeof lastDay.budgetRemainingOnDate === 'number' && !isNaN(lastDay.budgetRemainingOnDate) && lastDay.budgetRemainingOnDate > 0) {
+    return Math.round(lastDay.budgetRemainingOnDate * 100) / 100;
+  }
+
+  const totalNorm = prevDays.reduce((sum, d) => sum + (d.normLimit || 0), 0);
+  const totalSpent = prevDays.reduce((sum, d) => sum + (d.spent || 0), 0);
+  const diff = totalNorm - totalSpent;
+  if (!isNaN(diff) && diff > 0) {
+    return Math.round(diff * 100) / 100;
+  }
+
+  return fallbackAmount;
+}
+
+/**
+ * Cleanly migrates budget state to the new period (e.g. September 2026).
+ * Ensures all sections are reset for fresh entries, only clean remainder carries over until salary arrives.
+ */
+export function migrateStateToNewPeriod(
+  currentState: BudgetState, 
+  actualToday: string = getTodayDateString(),
+  customRollover?: number
+): BudgetState {
+  const salaryDay = currentState.salaryDateDay || 5;
+  const advanceDay = currentState.advanceDateDay || 20;
+
+  // Determine current period template
+  const newTemplate = generatePeriodTemplateForMonth(
+    2026, 
+    9, 
+    salaryDay, 
+    advanceDay, 
+    actualToday
+  );
+
+  const newStartDate = newTemplate.startDateStr;
+  const newEndDate = newTemplate.endDateStr;
+  const newTitle = newTemplate.formattedLabel;
+  const newAdvanceDate = newTemplate.advanceDateStr;
+
+  // 1. Calculate clean rollover amount from previous period
+  const rolloverAmount = customRollover !== undefined
+    ? customRollover
+    : calculateCleanRemainderFromPreviousPeriod(
+        currentState.days || [],
+        currentState.periodStartDate,
+        currentState.periodEndDate,
+        11803.76
+      );
+
+  // 2. Plans migration:
+  // - Previous completed one-time items archived to 'previous'
+  // - Next-period plans promoted to 'current' with spent: 0, isPaid: false
+  // - Recurring plans kept in 'current' with spent: 0, isPaid: false
+  const updatedPlannedItems: PlannedItem[] = (currentState.plannedItems || []).map(item => {
+    const isRecurring = item.autoRenew !== false && (
+      item.category === 'обязательные' ||
+      item.isProgressTracked ||
+      item.title.toLowerCase().includes('бенз') ||
+      item.title.toLowerCase().includes('ddx') ||
+      item.title.toLowerCase().includes('ростелеком')
+    );
+
+    if (item.period === 'next') {
+      return {
+        ...item,
+        period: 'current',
+        spentAmount: 0,
+        isPaid: false,
+      };
+    }
+
+    if (isRecurring) {
+      return {
+        ...item,
+        period: 'current',
+        spentAmount: 0,
+        isPaid: false,
+      };
+    }
+
+    return {
+      ...item,
+      period: 'previous',
+    };
+  });
+
+  // 3. Daily norm calculation
+  const newSalary = currentState.currentSalary || 82650;
+  const cushionPercent = (currentState.cushionNormPercent || 10) / 100;
+  const newCushion = Math.round(newSalary * cushionPercent);
+  const recurringPlansTotal = updatedPlannedItems
+    .filter(p => !p.period || p.period === 'current')
+    .reduce((sum, p) => sum + p.amount, 0);
+
+  const expectedTotalFunds = rolloverAmount + (newSalary - newCushion);
+  const expectedDiscretionary = Math.max(0, expectedTotalFunds - recurringPlansTotal);
+  const newDailyNorm = Math.round((expectedDiscretionary / (newTemplate.totalDays || 31)) * 100) / 100;
+
+  // 4. Generate clean days for the new period
+  const daysShort = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  const daysFull = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+  const newPeriodDays: DayRecord[] = [];
+
+  const startDParts = newStartDate.split('-').map(Number);
+  const endDParts = newEndDate.split('-').map(Number);
+  const curr = new Date(startDParts[0], startDParts[1] - 1, startDParts[2]);
+  const end = new Date(endDParts[0], endDParts[1] - 1, endDParts[2]);
+
+  while (curr <= end) {
+    const y = curr.getFullYear();
+    const m = String(curr.getMonth() + 1).padStart(2, '0');
+    const d = String(curr.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${d}`;
+    const dayOfWeek = curr.getDay();
+
+    newPeriodDays.push({
+      date: dateStr,
+      dayNumber: curr.getDate(),
+      dayOfWeekShort: daysShort[dayOfWeek],
+      dayOfWeekFull: daysFull[dayOfWeek],
+      expenses: [],
+      spent: 0,
+      normLimit: newDailyNorm,
+      deviation: newDailyNorm,
+      budgetRemainingOnDate: newDailyNorm,
+      totalRemaining: rolloverAmount,
+      isToday: dateStr === actualToday,
+      isPast: dateStr < actualToday,
+    });
+
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  // Preserve previous days for historical records
+  const existingDaysMap = new Map<string, DayRecord>(
+    (currentState.days || []).map(d => [d.date, { ...d, isToday: false, isPast: true }])
+  );
+  newPeriodDays.forEach(d => {
+    existingDaysMap.set(d.date, d);
+  });
+  const combinedDays = Array.from(existingDaysMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+  // 5. Cushion Schedule fresh start
+  const freshCushionSchedule = buildCushionSchedule(
+    newSalary,
+    false,
+    0.00,
+    currentState.cushionAccumulated || 8269.53,
+    9,
+    2026,
+    currentState.cushionNormMode || 'percent',
+    currentState.cushionNormPercent ?? 10,
+    currentState.cushionNormFixedAmount ?? 8265.00
+  );
+
+  return {
+    ...currentState,
+    periodTitle: newTitle,
+    periodStartDate: newStartDate,
+    periodEndDate: newEndDate,
+    advancePaymentDate: newAdvanceDate,
+    isAdvanceReceived: false,
+    isSalaryReceived: false,
+    actualSalaryAmount: undefined,
+    salaryReceivedDate: undefined,
+    todayDate: actualToday,
+    total30DaysBudget: rolloverAmount, // Clean remainder until salary arrives!
+    previousMonthRemainder: rolloverAmount,
+    safetyCushionDeposit: 0.00,
+    isCushionDepositDoneThisMonth: false,
+    actualCushionDepositThisMonth: 0.00,
+    cushionSchedule: freshCushionSchedule,
+    plannedItems: updatedPlannedItems,
+    days: combinedDays,
+  };
+}
+
 const THEME_STORAGE_KEY = 'limit_dnya_theme_mode';
 
 const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 
 export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
+  const { profile, isOnboardingComplete } = useProfile(); // <-- ДОБАВЛЕНО
   const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'offline' | 'guest'>('guest');
   const [isBankSyncing, setIsBankSyncing] = useState(false);
   const isRemoteUpdateRef = useRef(false);
@@ -315,24 +590,56 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   });
 
   const [state, setState] = useState<BudgetState>(() => {
+    const actualToday = getTodayDateString();
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        const parsed = JSON.parse(saved);
+        let parsed = JSON.parse(saved);
         // ensure bank and income properties exist
         if (!parsed.bankAccounts) parsed.bankAccounts = INITIAL_BUDGET_STATE.bankAccounts;
         if (!parsed.pendingBankTransactions) parsed.pendingBankTransactions = INITIAL_BUDGET_STATE.pendingBankTransactions;
         if (!parsed.incomes) parsed.incomes = INITIAL_BUDGET_STATE.incomes || [];
+        
+        parsed.todayDate = actualToday;
+
+        // Check if state needs clean period rollover migration:
+        // 1. If periodStartDate is before September 4, 2026
+        // 2. OR if total30DaysBudget is carrying old full amount without salary received
+        // 3. OR if parsed.periodEndDate < actualToday
+        const needsPeriodRollover = !parsed.periodStartDate || 
+          parsed.periodStartDate < '2026-09-04' || 
+          parsed.periodEndDate < actualToday ||
+          (!parsed.isSalaryReceived && parsed.total30DaysBudget > 50000);
+
+        if (needsPeriodRollover) {
+          parsed = migrateStateToNewPeriod(parsed, actualToday);
+        } else {
+          if (Array.isArray(parsed.days)) {
+            parsed.days = parsed.days.map((d: DayRecord) => ({
+              ...d,
+              isToday: d.date === actualToday,
+              isPast: d.date < actualToday,
+            }));
+          }
+        }
         return parsed;
       }
     } catch {
       // Fallback
     }
-    return INITIAL_BUDGET_STATE;
+    return {
+      ...INITIAL_BUDGET_STATE,
+      todayDate: actualToday,
+      days: (INITIAL_BUDGET_STATE.days || []).map(d => ({
+        ...d,
+        isToday: d.date === actualToday,
+        isPast: d.date < actualToday,
+      }))
+    };
   });
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('today');
-  const [selectedDate, setSelectedDate] = useState<string>(state.todayDate);
+  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDateString());
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>('2026-08');
   const [isMobileFrame, setIsMobileFrame] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -360,6 +667,32 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
+  // Synchronize todayDate with the actual current date on window focus or interval
+  useEffect(() => {
+    const syncCurrentDate = () => {
+      const actualToday = getTodayDateString();
+      setState(prev => {
+        if (prev.todayDate === actualToday) return prev;
+        return {
+          ...prev,
+          todayDate: actualToday,
+          days: (prev.days || []).map(d => ({
+            ...d,
+            isToday: d.date === actualToday,
+            isPast: d.date < actualToday
+          }))
+        };
+      });
+    };
+
+    window.addEventListener('focus', syncCurrentDate);
+    const interval = setInterval(syncCurrentDate, 30000);
+    return () => {
+      window.removeEventListener('focus', syncCurrentDate);
+      clearInterval(interval);
+    };
+  }, []);
+
   // Sync state with Firestore when user is authenticated
   useEffect(() => {
     if (!user) {
@@ -384,7 +717,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
         
         // If document doesn't exist yet, seed initial user state
-        setDoc(userDocRef, state, { merge: true })
+        safeSetDoc(userDocRef, state, { merge: true })
           .then(() => setSyncStatus('synced'))
           .catch((err) => {
             console.error('Failed to seed budget to Firestore:', err);
@@ -418,7 +751,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const timer = setTimeout(async () => {
         try {
           const userDocRef = doc(db, 'users', user.uid, 'budgetData', 'state');
-          await setDoc(userDocRef, {
+          await safeSetDoc(userDocRef, {
             ...state,
             updatedAt: new Date().toISOString(),
           }, { merge: true });
@@ -432,6 +765,22 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return () => clearTimeout(timer);
     }
   }, [state, user]);
+
+  // <-- ДОБАВЛЕНО: автоматическая инициализация из профиля, если нет сохранённого состояния
+  useEffect(() => {
+    if (profile && isOnboardingComplete) {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) {
+        const newState = buildInitialStateFromProfile(profile);
+        setState(newState);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+        if (user) {
+          const userDocRef = doc(db, 'users', user.uid, 'budgetData', 'state');
+          safeSetDoc(userDocRef, { ...newState, updatedAt: new Date().toISOString() }, { merge: true });
+        }
+      }
+    }
+  }, [profile, isOnboardingComplete, user]);
 
   const toggleMobileFrame = () => {
     setIsMobileFrame(prev => !prev);
@@ -449,47 +798,105 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [state.plannedItems]);
 
   // 2. D1 "Итого на прочее" = B1 (Общий бюджет) - SUM(B4:B20) (Плановые статьи) - B3 (Подушка)
+  // When salary is not yet received, calculate expected month discretionary so baseDailyNorm reflects full month accurately
   const freeDiscretionaryBudget = useMemo(() => {
-    return Math.max(0, state.total30DaysBudget - totalPlannedSum - state.safetyCushionDeposit);
-  }, [state.total30DaysBudget, totalPlannedSum, state.safetyCushionDeposit]);
+    if (state.isSalaryReceived) {
+      return Math.max(0, state.total30DaysBudget - totalPlannedSum - (state.safetyCushionDeposit || 0));
+    }
+    const expectedSalary = state.currentSalary || 82650;
+    const expectedCushion = Math.round(expectedSalary * ((state.cushionNormPercent || 10) / 100));
+    const expectedTotalMonthFunds = (state.previousMonthRemainder || 0) + expectedSalary - expectedCushion;
+    return Math.max(0, expectedTotalMonthFunds - totalPlannedSum);
+  }, [state.isSalaryReceived, state.total30DaysBudget, totalPlannedSum, state.safetyCushionDeposit, state.currentSalary, state.cushionNormPercent, state.previousMonthRemainder]);
 
-  // 3. E1 "Итого в день" (Базовая норма) = D1 / 30
+  // Dynamic Rolling Period Templates (always includes 12+ months ahead)
+  const rollingPeriods = useMemo(() => {
+    const refDate = state.todayDate || getTodayDateString();
+    const salaryDay = state.salaryDateDay || 5;
+    const advanceDay = state.advanceDateDay || 20;
+    return generateRollingPeriodTemplates(refDate, 4, 14, salaryDay, advanceDay);
+  }, [state.todayDate, state.salaryDateDay, state.advanceDateDay]);
+
+  // Current period template matching state.todayDate
+  const currentPeriodTemplate = useMemo(() => {
+    const refDate = state.todayDate || getTodayDateString();
+    const found = findPeriodTemplateForDate(refDate, rollingPeriods);
+    if (found) return found;
+    return generatePeriodTemplateForMonth(2026, 9, state.salaryDateDay || 5, state.advanceDateDay || 20, refDate);
+  }, [state.todayDate, state.salaryDateDay, state.advanceDateDay, rollingPeriods]);
+
+  // 3. E1 "Итого в день" (Базовая норма) = D1 / totalDaysInPeriod
   const baseDailyNorm = useMemo(() => {
-    return freeDiscretionaryBudget > 0 ? (freeDiscretionaryBudget / 30) : 1155.51;
-  }, [freeDiscretionaryBudget]);
+    const totalDays = currentPeriodTemplate?.totalDays || 31;
+    if (freeDiscretionaryBudget > 0) {
+      return Math.round((freeDiscretionaryBudget / totalDays) * 100) / 100;
+    }
+    return 2110.68;
+  }, [freeDiscretionaryBudget, currentPeriodTemplate?.totalDays]);
 
   // 4. Days index & D3 "Дней до зарплаты"
   const todayIdx = useMemo(() => {
     const idx = (state.days || []).findIndex(d => d.date === state.todayDate);
-    return idx >= 0 ? idx : 21;
+    return idx >= 0 ? idx : 0;
   }, [state.days, state.todayDate]);
 
-  // Total days in period
+  // Accurate calculation of days to salary / end of current period
   const daysToSalary = useMemo(() => {
+    const todayStr = state.todayDate || getTodayDateString();
+    const targetDateStr = currentPeriodTemplate?.endDateStr || state.periodEndDate;
+
+    if (todayStr && targetDateStr) {
+      try {
+        const todayObj = new Date(todayStr + 'T00:00:00');
+        const targetObj = new Date(targetDateStr + 'T00:00:00');
+        const diffMs = targetObj.getTime() - todayObj.getTime();
+        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        if (!isNaN(diffDays)) {
+          const remainingDays = diffDays + 1;
+          return remainingDays >= 0 ? remainingDays : 0;
+        }
+      } catch {
+        // ignore and fallback
+      }
+    }
+
+    const targetIdx = (state.days || []).findIndex(d => d.date === targetDateStr);
+    if (targetIdx >= 0 && todayIdx >= 0) {
+      return Math.max(0, targetIdx - todayIdx + 1);
+    }
+
     const daysLen = (state.days || []).length;
-    const remaining = daysLen - 1 - todayIdx;
-    return remaining > 0 ? remaining : 9;
-  }, [state.days, todayIdx]);
+    const remaining = daysLen - todayIdx;
+    return remaining >= 0 ? remaining : 1;
+  }, [state.days, todayIdx, state.todayDate, currentPeriodTemplate?.endDateStr, state.periodEndDate]);
 
-  // 5. Total spent from start up to today
+  // 5. Total spent from start of current period up to today (does NOT include previous period)
   const totalPastAndTodaySpent = useMemo(() => {
+    const startStr = state.periodStartDate;
     return (state.days || [])
-      .filter((_, idx) => idx <= todayIdx)
+      .filter(d => (!startStr || d.date >= startStr) && d.date <= state.todayDate)
       .reduce((sum, d) => sum + d.spent, 0);
-  }, [state.days, todayIdx]);
+  }, [state.days, state.periodStartDate, state.todayDate]);
 
-  // 6. D5 "Чистый остаток на сегодня" = D1 - SUM(H_start : H_today)
+  // 6. D5 "Чистый остаток на сегодня"
   const cleanRemainderToday = useMemo(() => {
-    return Math.max(0, freeDiscretionaryBudget - totalPastAndTodaySpent);
-  }, [freeDiscretionaryBudget, totalPastAndTodaySpent]);
+    if (state.isSalaryReceived) {
+      return Math.max(0, freeDiscretionaryBudget - totalPastAndTodaySpent);
+    }
+    // Before salary arrives, remaining funds are from previousMonthRemainder
+    return Math.max(0, (state.previousMonthRemainder || 0) - totalPastAndTodaySpent);
+  }, [state.isSalaryReceived, freeDiscretionaryBudget, state.previousMonthRemainder, totalPastAndTodaySpent]);
 
-  // 7. E3 "Общий допустимый расход на сегодня" = D5 / D3 (текущий остаток, деленный на количество дней до зарплаты, гарантированно не 0)
+  // 7. E3 "Общий допустимый расход на сегодня"
   const todayAllowedSpend = useMemo(() => {
     const daysCount = Math.max(1, daysToSalary);
+    if (!state.isSalaryReceived) {
+      return Math.min(cleanRemainderToday, baseDailyNorm);
+    }
     const calculated = cleanRemainderToday / daysCount;
-    if (calculated > 0) return calculated;
-    return baseDailyNorm > 0 ? baseDailyNorm : 1155.51;
-  }, [cleanRemainderToday, daysToSalary, baseDailyNorm]);
+    if (calculated > 0) return Math.round(calculated * 100) / 100;
+    return baseDailyNorm > 0 ? baseDailyNorm : 2110.68;
+  }, [state.isSalaryReceived, cleanRemainderToday, daysToSalary, baseDailyNorm]);
 
   // Today record & today spent
   const todayRecord = useMemo(() => {
@@ -504,16 +911,27 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return Math.max(0, todayAllowedSpend - todaySpent);
   }, [todayAllowedSpend, todaySpent]);
 
-  // 8. Cumulative deviation & J33 "Предварительный остаток"
+  // 8. Forecast of ending period remainder:
+  // Strictly sums accumulated daily savings (deviations) from elapsed days in the CURRENT period only.
+  // Does NOT leak savings from the previous period!
   const todayRemainingForecast = useMemo(() => {
-    let accumulated = 0;
-    const daysList = state.days || [];
-    for (let i = 0; i <= todayIdx && i < daysList.length; i++) {
-      const d = daysList[i];
-      accumulated += (baseDailyNorm - d.spent);
+    const startStr = state.periodStartDate;
+    const endStr = state.periodEndDate;
+
+    const currentPeriodDays = (state.days || []).filter(d => 
+      (!startStr || d.date >= startStr) && (!endStr || d.date <= endStr)
+    );
+
+    const pastDaysInPeriod = currentPeriodDays.filter(d => d.date < state.todayDate);
+    const todayRec = currentPeriodDays.find(d => d.date === state.todayDate);
+
+    let accumulatedEconomy = pastDaysInPeriod.reduce((acc, d) => acc + (d.normLimit - d.spent), 0);
+    if (todayRec) {
+      accumulatedEconomy += (todayRec.normLimit - todayRec.spent);
     }
-    return Math.max(0, accumulated);
-  }, [state.days, todayIdx, baseDailyNorm]);
+
+    return Math.round(accumulatedEconomy * 100) / 100;
+  }, [state.days, state.periodStartDate, state.periodEndDate, state.todayDate]);
 
   // 9. D7 "Средний расход в сутки", 10. E7 "Медианный расход"
   const { avgSpendPerDay, medianSpendPerDay } = useMemo(() => {
@@ -613,36 +1031,64 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // ==========================================
 
   // 1. Is advance date reached for the current period?
+  // Evaluates according to the current period's advance payout date (e.g. 20.08.2026 for period 05.08 - 03.09)
   const isAdvanceDateReached = useMemo(() => {
     try {
-      const today = new Date(state.todayDate);
-      const advDate = new Date(state.advancePaymentDate || '2026-08-20');
-      return today.getTime() >= advDate.getTime();
+      if (state.isAdvanceReceived === true) return true;
+
+      const todayStr = state.todayDate || getTodayDateString();
+
+      // Current period's advance date from template (e.g. 2026-08-20)
+      const currentPeriodAdvDate = currentPeriodTemplate?.advanceDateStr;
+      if (currentPeriodAdvDate) {
+        return todayStr >= currentPeriodAdvDate;
+      }
+
+      // If template not available, derive from period start date (e.g. 2026-08-05 -> 2026-08-20)
+      if (state.periodStartDate) {
+        const parts = state.periodStartDate.split('-');
+        if (parts.length >= 2) {
+          const y = parts[0];
+          const m = parts[1];
+          const advDay = state.advanceDateDay || 20;
+          const calcAdvDate = `${y}-${m.padStart(2, '0')}-${String(advDay).padStart(2, '0')}`;
+          return todayStr >= calcAdvDate;
+        }
+      }
+
+      const advDate = state.advancePaymentDate || '2026-08-20';
+      return todayStr >= advDate;
     } catch {
       return true;
     }
-  }, [state.todayDate, state.advancePaymentDate]);
+  }, [
+    state.isAdvanceReceived, 
+    state.todayDate, 
+    currentPeriodTemplate?.advanceDateStr, 
+    state.periodStartDate, 
+    state.advanceDateDay, 
+    state.advancePaymentDate
+  ]);
 
   // 2. Unreached planned expenses (Недостигнутые запланированные расходы)
+  // For items already marked as paid (isPaid === true), unreached is 0.
   // For progress-tracked items (e.g. "Бенз"): plan 18 000 ₽, spent 12 000 ₽ -> remaining 6 000 ₽
-  // If overspent (e.g. spent 20 000 ₽ on plan 18 000 ₽) -> diff is -2 000 ₽ (перерасход),
-  // so it correctly reflects in the correction formula.
-  // For other items: if not paid yet, full amount is unreached
+  // If user fulfilled all plans (or marked them paid), unreached sum = 0.
   const unreachedPlannedExpenses = useMemo(() => {
     return (state.plannedItems || []).reduce((sum, item) => {
       // Exclude existing 'Корректировка' item from unreached sum
       if (item.title.toLowerCase().includes('корректировка')) {
         return sum;
       }
+      if (item.isPaid) {
+        return sum;
+      }
       if (item.isProgressTracked || item.title.toLowerCase().includes('бенз')) {
         const spent = item.spentAmount ?? 0;
-        const diff = item.amount - spent; // Can be negative on overspending!
-        return sum + diff;
+        const remaining = Math.max(0, item.amount - spent);
+        return sum + remaining;
       } else {
-        if (!item.isPaid) {
-          return sum + item.amount;
-        }
-        return sum;
+        return sum + item.amount;
       }
     }, 0);
   }, [state.plannedItems]);
@@ -673,22 +1119,6 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // SALARY SCHEDULE & PERIOD ROLLOVER ENGINE
   // ==========================================
 
-  // 1. Dynamic Rolling Period Templates (always includes 12+ months ahead)
-  const rollingPeriods = useMemo(() => {
-    const refDate = state.todayDate || '2026-08-26';
-    const salaryDay = state.salaryDateDay || 5;
-    const advanceDay = state.advanceDateDay || 20;
-    return generateRollingPeriodTemplates(refDate, 4, 14, salaryDay, advanceDay);
-  }, [state.todayDate, state.salaryDateDay, state.advanceDateDay]);
-
-  // 2. Current period template matching state.todayDate
-  const currentPeriodTemplate = useMemo(() => {
-    const refDate = state.todayDate || '2026-08-26';
-    const found = findPeriodTemplateForDate(refDate, rollingPeriods);
-    if (found) return found;
-    return generatePeriodTemplateForMonth(2026, 8, state.salaryDateDay || 5, state.advanceDateDay || 20, refDate);
-  }, [state.todayDate, state.salaryDateDay, state.advanceDateDay, rollingPeriods]);
-
   // 3. Active viewing period (can be switched by user via dropdown in any widget)
   const activeViewingPeriod = useMemo(() => {
     return rollingPeriods.find(p => p.id === selectedPeriodId) || currentPeriodTemplate;
@@ -701,7 +1131,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Salary Schedule for the current active period/month
   const salarySchedule = useMemo(() => {
     try {
-      const parts = (state.todayDate || '2026-08-26').split('-');
+      const parts = (state.todayDate || getTodayDateString()).split('-');
       const y = parseInt(parts[0], 10) || 2026;
       const m = parseInt(parts[1], 10) || 8;
       return getSalaryDateInfo(y, m, state.salaryDateDay || 5);
@@ -758,6 +1188,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       dailyBudgetRemaining,
       unrealizedPlansSavings: totalSaved,
       totalEndingRemainder,
+      cleanRemainderOnEndingDate: dailyBudgetRemaining,
       unrealizedPlansBreakdown,
     };
   }, [cleanRemainderToday, state.plannedItems]);
@@ -1562,100 +1993,111 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
-  // Start new budget period on salary day, rolling over unspent remainder + unrealized plans savings
+  // Start new budget period on salary day, rolling over clean remainder from last day of previous period
   const startNewPeriod = (options?: { newSalary?: number; targetDate?: string; customRollover?: number }) => {
     const currentEndingInfo = periodEndingRemainderInfo;
+    let cleanRollover = currentEndingInfo.dailyBudgetRemaining;
+    if (cleanRollover === undefined || isNaN(cleanRollover) || cleanRollover <= 0) {
+      cleanRollover = calculateCleanRemainderFromPreviousPeriod(
+        state.days || [], 
+        state.periodStartDate, 
+        state.periodEndDate, 
+        11803.76
+      );
+    }
     const rolloverAmount = options?.customRollover !== undefined 
       ? options.customRollover 
-      : currentEndingInfo.totalEndingRemainder;
+      : cleanRollover;
 
-    const newSalary = options?.newSalary ?? state.currentSalary;
-    const newCushion = Math.round(newSalary * 0.10); // 10%
-
-    // Calculate current period month & next period
-    const currentStartParts = (state.periodStartDate || '2026-08-05').split('-');
-    let currentStartYear = parseInt(currentStartParts[0], 10) || 2026;
-    let currentStartMonth = parseInt(currentStartParts[1], 10) || 8;
-
-    let nextMonth = currentStartMonth + 1;
-    let nextYear = currentStartYear;
-    if (nextMonth > 12) {
-      nextMonth = 1;
-      nextYear += 1;
+    let targetStartDate = options?.targetDate;
+    if (!targetStartDate) {
+      const currentStartParts = (state.periodStartDate || '2026-08-05').split('-');
+      let currentStartYear = parseInt(currentStartParts[0], 10) || 2026;
+      let currentStartMonth = parseInt(currentStartParts[1], 10) || 8;
+      let nextMonth = currentStartMonth + 1;
+      let nextYear = currentStartYear;
+      if (nextMonth > 12) {
+        nextMonth = 1;
+        nextYear += 1;
+      }
+      const nextTemplate = generatePeriodTemplateForMonth(
+        nextYear,
+        nextMonth,
+        state.salaryDateDay || 5,
+        state.advanceDateDay || 20
+      );
+      targetStartDate = nextTemplate.startDateStr;
     }
 
-    const nextTemplate = generatePeriodTemplateForMonth(
-      nextYear,
-      nextMonth,
-      state.salaryDateDay || 5,
-      state.advanceDateDay || 20,
-      options?.targetDate
-    );
-
-    const newPeriodStartDate = options?.targetDate || nextTemplate.startDateStr;
-    const newPeriodEndDate = nextTemplate.endDateStr;
-    const newPeriodTitle = nextTemplate.formattedLabel;
-    const newAdvancePaymentDate = nextTemplate.advanceDateStr;
-
-    // Recalculate total 30-day budget = salary + rollover - cushion
-    const newTotalBudget = Math.round((newSalary + rolloverAmount - newCushion) * 100) / 100;
-
-    // Reset progress on recurring items like fuel ("Бенз")
-    const updatedPlannedItems = (state.plannedItems || []).map(item => {
-      if (item.isProgressTracked || item.title.toLowerCase().includes('бенз')) {
-        return {
-          ...item,
-          spentAmount: 0,
-          isPaid: false,
-        };
-      }
-      return {
-        ...item,
-        isPaid: false,
-      };
-    });
-
-    // Generate days for the new month
-    const generatedDays = generateMonthDays(nextYear, nextMonth, 1155.51);
-
     setState(prev => {
-      const existingDateMap = new Map<string, DayRecord>((prev.days || []).map(d => [d.date, d]));
-      generatedDays.forEach(nd => {
-        if (!existingDateMap.has(nd.date)) {
-          existingDateMap.set(nd.date, nd as DayRecord);
-        }
-      });
-
-      const updatedDays: DayRecord[] = Array.from(existingDateMap.values()).map(d => ({
-        ...d,
-        isToday: d.date === newPeriodStartDate,
-        isPast: d.date < newPeriodStartDate,
-      })).sort((a, b) => a.date.localeCompare(b.date));
-
-      return {
+      const modifiedPrev = {
         ...prev,
-        periodTitle: newPeriodTitle,
-        periodStartDate: newPeriodStartDate,
-        periodEndDate: newPeriodEndDate,
-        advancePaymentDate: newAdvancePaymentDate,
-        isAdvanceReceived: false,
-        todayDate: newPeriodStartDate,
-        currentSalary: newSalary,
-        previousMonthRemainder: rolloverAmount,
-        safetyCushionDeposit: newCushion,
-        total30DaysBudget: newTotalBudget,
-        plannedItems: updatedPlannedItems,
-        days: updatedDays,
+        currentSalary: options?.newSalary ?? prev.currentSalary,
       };
+      return migrateStateToNewPeriod(modifiedPrev, targetStartDate, rolloverAmount);
     });
 
-    setSelectedDate(newPeriodStartDate);
+    setSelectedDate(targetStartDate);
 
     return {
       success: true,
-      message: `Новый период (${newPeriodTitle}) успешно запущен! Переходящий остаток: ${formatRubles(rolloverAmount)}.`,
+      message: `Новый период успешно запущен! Перенесён чистый остаток: ${formatRubles(rolloverAmount)}. Ожидается поступление заработной платы.`,
       rolloverAmount,
     };
+  };
+
+  // Receive salary: updates total budget, credits safety cushion, and records income
+  const receiveSalary = (amount?: number) => {
+    setState(prev => {
+      const actualSalary = amount ?? prev.currentSalary ?? 82650;
+      const cushionPct = (prev.cushionNormPercent || 10) / 100;
+      const cushionDeduction = Math.round(actualSalary * cushionPct);
+      const updatedTotalBudget = Math.round(((prev.previousMonthRemainder || 0) + actualSalary - cushionDeduction) * 100) / 100;
+
+      const salaryIncome: IncomeItem = {
+        id: `inc-salary-${Date.now()}`,
+        title: 'Зачисление зарплаты',
+        amount: actualSalary,
+        date: prev.todayDate,
+        time: '10:00',
+        sourceType: 'salary',
+        sourceName: 'Зарплатный счет (ООО «Технологии»)',
+        category: 'Зарплата',
+        isIncludedInBudget: true,
+        isManual: false,
+        createdAt: new Date().toISOString(),
+      };
+
+      const newAccumulated = (prev.cushionAccumulated || 0) + cushionDeduction;
+
+      const updatedCushionSchedule = (prev.cushionSchedule || []).map((row, idx) => {
+        if (idx === 0) {
+          return {
+            ...row,
+            isDepositMade: true,
+            monthlyDeposit: cushionDeduction,
+            actualDepositAmount: cushionDeduction,
+            deviation: 0,
+            accumulatedTotal: newAccumulated,
+          };
+        }
+        return row;
+      });
+
+      return {
+        ...prev,
+        isSalaryReceived: true,
+        actualSalaryAmount: actualSalary,
+        salaryReceivedDate: prev.todayDate,
+        total30DaysBudget: updatedTotalBudget,
+        safetyCushionDeposit: cushionDeduction,
+        cushionAccumulated: newAccumulated,
+        isCushionDepositDoneThisMonth: true,
+        actualCushionDepositThisMonth: cushionDeduction,
+        cushionSchedule: updatedCushionSchedule,
+        incomes: [salaryIncome, ...(prev.incomes || [])],
+      };
+    });
   };
 
   // Automatically transition to a new period whenever the salary day arrives
@@ -1700,6 +2142,21 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setState(prev => {
       const tx = (prev.pendingBankTransactions || []).find(t => t.id === transactionId);
       if (!tx) return prev;
+
+      // If this transaction is an incoming salary, handle as salary receipt
+      if (
+        tx.type === 'income' &&
+        (tx.categoryName === 'Зарплата' || (tx.categoryType as string) === 'зарплата' || tx.title.toLowerCase().includes('зарплат'))
+      ) {
+        setTimeout(() => {
+          receiveSalary(tx.amount);
+        }, 10);
+
+        return {
+          ...prev,
+          pendingBankTransactions: (prev.pendingBankTransactions || []).filter(t => t.id !== transactionId),
+        };
+      }
 
       const targetDate = tx.date || prev.todayDate;
       const targetDay = (prev.days || []).find(d => d.date === targetDate) || (prev.days || []).find(d => d.date === prev.todayDate);
@@ -1758,30 +2215,39 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const plannedItem = (prev.plannedItems || []).find(p => p.id === plannedItemId);
       if (!plannedItem) return prev;
 
-      const isFuelOrProgress = plannedItem.isProgressTracked || plannedItem.title.toLowerCase().includes('бенз');
+      const currentSpent = plannedItem.spentAmount || (plannedItem.isPaid ? plannedItem.amount : 0);
+      const newSpent = currentSpent + tx.amount;
+      const planAmount = plannedItem.amount;
+
+      let isPaid = false;
+      let isProgressTracked = true;
+
+      if (Math.abs(newSpent - planAmount) < 0.01) {
+        // Правило 1: если фактическая сумма совпала с плановой - учитываем план как достигнутый, ставим галочку
+        isPaid = true;
+        isProgressTracked = false;
+        resultMessage = `Сумма ${formatRubles(tx.amount)} совпала с планом «${plannedItem.title}». Статья выполнена и отмечена как оплаченная ✓`;
+      } else if (newSpent < planAmount) {
+        // Правило 2: если факт < план, внутри плановой статьи создаём шкалу и учитываем фактическую сумму
+        isPaid = false;
+        isProgressTracked = true;
+        resultMessage = `Сумма ${formatRubles(tx.amount)} добавлена в шкалу расхода «${plannedItem.title}». Накоплено ${formatRubles(newSpent)} из ${formatRubles(planAmount)}.`;
+      } else {
+        // Правило 3: если факт > план, создаём шкалу, учитываем факт, но сумму плана не меняем, фиксируем перерасход
+        isPaid = false;
+        isProgressTracked = true;
+        resultMessage = `Сумма ${formatRubles(tx.amount)} добавлена в шкалу «${plannedItem.title}». Зафиксирован перерасход: ${formatRubles(newSpent)} при плане ${formatRubles(planAmount)}.`;
+      }
 
       const updatedPlannedItems = (prev.plannedItems || []).map(p => {
         if (p.id !== plannedItemId) return p;
-
-        if (isFuelOrProgress) {
-          const currentSpent = p.spentAmount || 0;
-          const newSpent = currentSpent + tx.amount;
-          return {
-            ...p,
-            spentAmount: newSpent,
-            isPaid: newSpent >= p.amount,
-          };
-        } else {
-          return {
-            ...p,
-            isPaid: true,
-          };
-        }
+        return {
+          ...p,
+          spentAmount: newSpent,
+          isPaid,
+          isProgressTracked,
+        };
       });
-
-      resultMessage = isFuelOrProgress
-        ? `Сумма ${formatRubles(tx.amount)} добавлена к расходу «${plannedItem.title}». Дневной лимит не затронут.`
-        : `Статья «${plannedItem.title}» отмечена как оплаченная. Дневной лимит не затронут.`;
 
       return {
         ...prev,
@@ -1791,6 +2257,214 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     return { success: true, message: resultMessage };
+  };
+
+  // ==========================================
+  // MARKETPLACE SYNC ACTIONS (WB & OZON)
+  // ==========================================
+
+  const connectMarketplace = (marketplace: 'wildberries' | 'ozon') => {
+    setState(prev => {
+      const currentSync = prev.marketplaceSync || {
+        isWildberriesConnected: false,
+        isOzonConnected: false,
+        lastSyncedAt: new Date().toISOString(),
+        orders: [],
+      };
+
+      const isWb = marketplace === 'wildberries';
+      const targetTitle = isWb ? 'Wildberries' : 'OZON';
+
+      // Проверяем, есть ли уже статья в планах
+      const existingPlan = (prev.plannedItems || []).find(
+        p => p.title.toLowerCase() === targetTitle.toLowerCase()
+      );
+
+      let updatedPlannedItems = [...(prev.plannedItems || [])];
+
+      if (!existingPlan) {
+        // Создаем статью маркетплейса с отслеживанием прогресса
+        const activeOrders = currentSync.orders.filter(
+          o => o.marketplace === marketplace && o.status !== 'cancelled'
+        );
+        const planSum = activeOrders.reduce((sum, o) => sum + o.price, 0) || (isWb ? 6139 : 2500);
+        const deliveredSum = activeOrders
+          .filter(o => o.status === 'delivered')
+          .reduce((sum, o) => sum + o.price, 0);
+
+        updatedPlannedItems.push({
+          id: `p-${marketplace}-${Date.now()}`,
+          title: targetTitle,
+          amount: planSum,
+          spentAmount: deliveredSum,
+          isProgressTracked: true,
+          category: 'покупки',
+          isPaid: deliveredSum > 0 && Math.abs(deliveredSum - planSum) < 0.01,
+          autoRenew: true,
+          notes: `Автосинхронизация заказов с ${targetTitle}`,
+        });
+      }
+
+      return {
+        ...prev,
+        marketplaceSync: {
+          ...currentSync,
+          isWildberriesConnected: isWb ? true : currentSync.isWildberriesConnected,
+          isOzonConnected: !isWb ? true : currentSync.isOzonConnected,
+          lastSyncedAt: new Date().toISOString(),
+        },
+        plannedItems: updatedPlannedItems,
+      };
+    });
+  };
+
+  const disconnectMarketplace = (marketplace: 'wildberries' | 'ozon') => {
+    setState(prev => {
+      if (!prev.marketplaceSync) return prev;
+      return {
+        ...prev,
+        marketplaceSync: {
+          ...prev.marketplaceSync,
+          isWildberriesConnected: marketplace === 'wildberries' ? false : prev.marketplaceSync.isWildberriesConnected,
+          isOzonConnected: marketplace === 'ozon' ? false : prev.marketplaceSync.isOzonConnected,
+        }
+      };
+    });
+  };
+
+  const syncMarketplaceOrders = () => {
+    setState(prev => {
+      if (!prev.marketplaceSync) return prev;
+      return {
+        ...prev,
+        marketplaceSync: {
+          ...prev.marketplaceSync,
+          lastSyncedAt: new Date().toISOString(),
+        }
+      };
+    });
+  };
+
+  // Отмена / отказ от товара на маркетплейсе
+  const cancelMarketplaceOrder = (orderId: string) => {
+    setState(prev => {
+      if (!prev.marketplaceSync) return prev;
+      const order = prev.marketplaceSync.orders.find(o => o.id === orderId);
+      if (!order || order.status === 'cancelled') return prev;
+
+      const targetTitle = order.marketplace === 'wildberries' ? 'Wildberries' : 'OZON';
+
+      // Обновляем статус заказа
+      const updatedOrders = prev.marketplaceSync.orders.map(o => 
+        o.id === orderId ? { ...o, status: 'cancelled' as const } : o
+      );
+
+      // Плановая сумма маркетплейса уменьшается на цену товара
+      const updatedPlannedItems = (prev.plannedItems || []).map(p => {
+        if (p.title.toLowerCase() !== targetTitle.toLowerCase()) return p;
+        const newPlan = Math.max(0, p.amount - order.price);
+        const spent = p.spentAmount || 0;
+        const isPaid = newPlan > 0 && Math.abs(spent - newPlan) < 0.01;
+        return {
+          ...p,
+          amount: newPlan,
+          isPaid,
+          isProgressTracked: !isPaid,
+        };
+      });
+
+      return {
+        ...prev,
+        plannedItems: updatedPlannedItems,
+        marketplaceSync: {
+          ...prev.marketplaceSync,
+          orders: updatedOrders,
+        }
+      };
+    });
+  };
+
+  // Покупка состоялась (товар получен / выкуплен)
+  const receiveMarketplaceOrder = (orderId: string) => {
+    setState(prev => {
+      if (!prev.marketplaceSync) return prev;
+      const order = prev.marketplaceSync.orders.find(o => o.id === orderId);
+      if (!order || order.status === 'delivered') return prev;
+
+      const targetTitle = order.marketplace === 'wildberries' ? 'Wildberries' : 'OZON';
+
+      const updatedOrders = prev.marketplaceSync.orders.map(o => 
+        o.id === orderId ? { ...o, status: 'delivered' as const } : o
+      );
+
+      // Шкала факта увеличивается на эту сумму
+      const updatedPlannedItems = (prev.plannedItems || []).map(p => {
+        if (p.title.toLowerCase() !== targetTitle.toLowerCase()) return p;
+        const currentSpent = p.spentAmount || 0;
+        const newSpent = currentSpent + order.price;
+        const plan = p.amount;
+        const isPaid = Math.abs(newSpent - plan) < 0.01;
+        return {
+          ...p,
+          spentAmount: newSpent,
+          isPaid,
+          isProgressTracked: !isPaid,
+        };
+      });
+
+      return {
+        ...prev,
+        plannedItems: updatedPlannedItems,
+        marketplaceSync: {
+          ...prev.marketplaceSync,
+          orders: updatedOrders,
+        }
+      };
+    });
+  };
+
+  // Пополнение WB / OZON кошелька
+  const recordMarketplaceWalletTopup = (marketplace: 'wildberries' | 'ozon', amount: number) => {
+    setState(prev => {
+      const targetTitle = marketplace === 'wildberries' ? 'Wildberries' : 'OZON';
+      const existingPlan = (prev.plannedItems || []).find(
+        p => p.title.toLowerCase() === targetTitle.toLowerCase()
+      );
+
+      let updatedPlannedItems = [...(prev.plannedItems || [])];
+
+      if (existingPlan) {
+        updatedPlannedItems = updatedPlannedItems.map(p => {
+          if (p.id !== existingPlan.id) return p;
+          const currentSpent = p.spentAmount || 0;
+          const newSpent = currentSpent + amount;
+          const plan = p.amount;
+          const isPaid = Math.abs(newSpent - plan) < 0.01;
+          return {
+            ...p,
+            spentAmount: newSpent,
+            isPaid,
+            isProgressTracked: !isPaid,
+          };
+        });
+      } else {
+        updatedPlannedItems.push({
+          id: `p-${marketplace}-${Date.now()}`,
+          title: targetTitle,
+          amount: amount,
+          spentAmount: amount,
+          isProgressTracked: false,
+          isPaid: true,
+          category: 'покупки',
+          notes: `Пополнение кошелька ${targetTitle}`,
+        });
+      }
+
+      return {
+        ...prev,
+        plannedItems: updatedPlannedItems,
+      };
+    });
   };
 
   // ==========================================
@@ -2290,6 +2964,580 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }));
   };
 
+  // ==========================================
+  // CREDIT CARDS ACTIONS
+  // ==========================================
+  const addCreditCard = (cardData: Omit<CreditCard, 'id' | 'lastUpdated'>) => {
+    const cardId = `cc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const formattedMask = cardData.cardMask.replace(/^•*/, '•');
+    const newCard: CreditCard = {
+      ...cardData,
+      id: cardId,
+      cardMask: formattedMask,
+      initialDebt: cardData.initialDebt !== undefined ? cardData.initialDebt : cardData.currentDebt,
+      lastUpdated: new Date().toISOString(),
+      isPaidOff: cardData.currentDebt <= 0,
+    };
+
+    setState(prev => {
+      const updatedCards = [...(prev.creditCards || []), newCard];
+      let updatedPlanned = [...prev.plannedItems];
+
+      // Если долговая стратегия и указан ежемесячный платеж — создаем статью в планах
+      if (newCard.strategy === 'debt' && (newCard.monthlyPayment || 0) > 0 && !newCard.isPaidOff) {
+        const plannedId = `plan_cc_${newCard.id}`;
+        const existingIdx = updatedPlanned.findIndex(p => p.creditCardId === newCard.id || p.id === plannedId);
+        const plannedItem: PlannedItem = {
+          id: plannedId,
+          title: `Кредитная карта ${newCard.bankName} (${newCard.cardMask})`,
+          amount: newCard.monthlyPayment || 0,
+          category: 'обязательные',
+          isPaid: false,
+          type: 'credit_card',
+          creditCardId: newCard.id,
+          period: 'current',
+          notes: `Ежемесячный платёж по кредитной карте ${newCard.bankName}`,
+        };
+
+        if (existingIdx >= 0) {
+          updatedPlanned[existingIdx] = plannedItem;
+        } else {
+          updatedPlanned.push(plannedItem);
+        }
+      }
+
+      return {
+        ...prev,
+        creditCards: updatedCards,
+        plannedItems: updatedPlanned,
+      };
+    });
+  };
+
+  const updateCreditCard = (id: string, updated: Partial<CreditCard>) => {
+    setState(prev => {
+      const cards = prev.creditCards || [];
+      const cardIndex = cards.findIndex(c => c.id === id);
+      if (cardIndex === -1) return prev;
+
+      const currentCard = cards[cardIndex];
+      const mergedDebt = updated.currentDebt !== undefined ? updated.currentDebt : currentCard.currentDebt;
+      const isCardPaidOff = mergedDebt <= 0;
+
+      const mergedCard: CreditCard = {
+        ...currentCard,
+        ...updated,
+        cardMask: updated.cardMask ? updated.cardMask.replace(/^•*/, '•') : currentCard.cardMask,
+        currentDebt: mergedDebt,
+        isPaidOff: isCardPaidOff,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      const updatedCards = [...cards];
+      updatedCards[cardIndex] = mergedCard;
+
+      let updatedPlanned = [...prev.plannedItems];
+      const linkedPlanIdx = updatedPlanned.findIndex(p => p.creditCardId === id || p.id === `plan_cc_${id}`);
+
+      if (mergedCard.strategy === 'optimizer' || mergedCard.isPaidOff) {
+        // Если стратегия стала 'optimizer' или долг закрыт — удаляем связанную плановую статью
+        if (linkedPlanIdx >= 0) {
+          updatedPlanned.splice(linkedPlanIdx, 1);
+        }
+      } else if (mergedCard.strategy === 'debt') {
+        const paymentAmount = mergedCard.monthlyPayment || 0;
+        if (paymentAmount > 0) {
+          const plannedItem: PlannedItem = {
+            id: `plan_cc_${id}`,
+            title: `Кредитная карта ${mergedCard.bankName} (${mergedCard.cardMask})`,
+            amount: paymentAmount,
+            category: 'обязательные',
+            isPaid: linkedPlanIdx >= 0 ? updatedPlanned[linkedPlanIdx].isPaid : false,
+            type: 'credit_card',
+            creditCardId: id,
+            period: linkedPlanIdx >= 0 ? (updatedPlanned[linkedPlanIdx].period || 'current') : 'current',
+            notes: `Ежемесячный платёж по кредитной карте ${mergedCard.bankName}`,
+          };
+
+          if (linkedPlanIdx >= 0) {
+            updatedPlanned[linkedPlanIdx] = {
+              ...updatedPlanned[linkedPlanIdx],
+              ...plannedItem,
+            };
+          } else {
+            updatedPlanned.push(plannedItem);
+          }
+        } else if (linkedPlanIdx >= 0) {
+          updatedPlanned.splice(linkedPlanIdx, 1);
+        }
+      }
+
+      return {
+        ...prev,
+        creditCards: updatedCards,
+        plannedItems: updatedPlanned,
+      };
+    });
+  };
+
+  const removeCreditCard = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      creditCards: (prev.creditCards || []).filter(c => c.id !== id),
+      plannedItems: prev.plannedItems.filter(p => p.creditCardId !== id && p.id !== `plan_cc_${id}`),
+    }));
+  };
+
+  const updateCreditCardDebt = (id: string, newDebt: number) => {
+    const validDebt = Math.max(0, newDebt);
+    setState(prev => {
+      const cards = prev.creditCards || [];
+      const cardIndex = cards.findIndex(c => c.id === id);
+      if (cardIndex === -1) return prev;
+
+      const card = cards[cardIndex];
+      const isPaidOff = validDebt <= 0;
+      const updatedCard: CreditCard = {
+        ...card,
+        currentDebt: validDebt,
+        isPaidOff: isPaidOff,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      const updatedCards = [...cards];
+      updatedCards[cardIndex] = updatedCard;
+
+      let updatedPlanned = [...prev.plannedItems];
+      if (isPaidOff && card.strategy === 'debt') {
+        const linkedPlanIdx = updatedPlanned.findIndex(p => p.creditCardId === id || p.id === `plan_cc_${id}`);
+        if (linkedPlanIdx >= 0) {
+          updatedPlanned[linkedPlanIdx] = {
+            ...updatedPlanned[linkedPlanIdx],
+            isPaid: true,
+          };
+        }
+      }
+
+      return {
+        ...prev,
+        creditCards: updatedCards,
+        plannedItems: updatedPlanned,
+      };
+    });
+  };
+
+  const refreshCreditCardGracePeriod = (id: string, newGraceDate?: string) => {
+    setState(prev => {
+      const cards = prev.creditCards || [];
+      const cardIndex = cards.findIndex(c => c.id === id);
+      if (cardIndex === -1) return prev;
+
+      const card = cards[cardIndex];
+      let finalDate = newGraceDate;
+      if (!finalDate) {
+        const base = card.gracePeriodEndDate ? new Date(card.gracePeriodEndDate) : new Date();
+        base.setDate(base.getDate() + 30);
+        finalDate = base.toISOString().split('T')[0];
+      }
+
+      const updatedCards = [...cards];
+      updatedCards[cardIndex] = {
+        ...card,
+        gracePeriodEndDate: finalDate,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      return {
+        ...prev,
+        creditCards: updatedCards,
+      };
+    });
+  };
+
+  // ==========================================
+  // REGULAR EXPENSES AI ACTIONS
+  // ==========================================
+  const analyzeRegularExpenses = (): SuggestedRegularExpense[] => {
+    const transactions = state.pendingBankTransactions || [];
+    return analyzeBankTransactionsForRegularExpenses(transactions, state.ignoredMerchants || []);
+  };
+
+  const applySuggestedPlans = (suggestions: SuggestedRegularExpense[]) => {
+    setState(prev => {
+      const existingTitles = new Set((prev.plannedItems || []).map(p => p.title.toLowerCase().trim()));
+      const newPlans: PlannedItem[] = [];
+
+      suggestions.forEach(s => {
+        if (existingTitles.has(s.title.toLowerCase().trim())) {
+          return;
+        }
+
+        const finalAmount = s.isFixed ? s.amount : (s.predictedAmount || s.amount);
+        newPlans.push({
+          id: `plan_auto_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          title: s.title,
+          amount: finalAmount,
+          spentAmount: 0,
+          isProgressTracked: s.category === 'авто',
+          category: s.category || 'обязательные',
+          isPaid: false,
+          notes: s.isFixed 
+            ? `Автоанализ: фиксированный платёж (${s.typicalDay}-е число)` 
+            : `Автоанализ: прогноз с учетом тренда (${s.typicalDay}-е число)`,
+          type: 'regular',
+          isAutoGenerated: true,
+          autoRenew: s.autoRenew !== false,
+          sourceMerchant: s.merchant,
+          typicalDay: s.typicalDay,
+        });
+      });
+
+      return {
+        ...prev,
+        plannedItems: [...prev.plannedItems, ...newPlans],
+        regularExpensesAnalyzed: true,
+      };
+    });
+  };
+
+  const setRegularExpensesAnalyzed = (status: boolean = true) => {
+    setState(prev => ({
+      ...prev,
+      regularExpensesAnalyzed: status,
+    }));
+  };
+
+  const ignoreMerchant = (merchant: string) => {
+    if (!merchant) return;
+    setState(prev => {
+      const currentIgnored = prev.ignoredMerchants || [];
+      if (currentIgnored.includes(merchant)) return prev;
+      return {
+        ...prev,
+        ignoredMerchants: [...currentIgnored, merchant],
+      };
+    });
+  };
+
+  const togglePlannedItemAutoRenew = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      plannedItems: (prev.plannedItems || []).map(p => 
+        p.id === id ? { ...p, autoRenew: !p.autoRenew } : p
+      )
+    }));
+  };
+
+  const getPaymentDateAdvice = (): PaymentDateOptimizationAdvice => {
+    const suggestions = analyzeRegularExpenses();
+    return analyzePaymentDates(suggestions, state.salaryDateDay || 5);
+  };
+
+  // ==========================================
+  // FOOD & GROCERIES MANAGEMENT ACTIONS
+  // ==========================================
+  const totalFoodSpentThisPeriod = useMemo(() => {
+    return calculateTotalFoodSpentInPeriod(
+      state.days || [],
+      state.periodStartDate,
+      state.periodEndDate
+    );
+  }, [state.days, state.periodStartDate, state.periodEndDate]);
+
+  const setFoodControl = (config: FoodControlState) => {
+    setState(prev => {
+      const basketTotal = config.mode === 'simple' ? 0 : calculateBasketTotal(config.basketItems || []);
+      const updatedControl: FoodControlState = {
+        ...config,
+        basketTotal,
+        lastUpdated: new Date().toISOString(),
+        priceHistory: config.priceHistory && config.priceHistory.length > 0 
+          ? config.priceHistory 
+          : generateDefaultFoodPriceHistory(basketTotal),
+      };
+      return {
+        ...prev,
+        foodControl: updatedControl,
+      };
+    });
+  };
+
+  const setFoodMode = (mode: FoodControlMode) => {
+    setState(prev => {
+      const current = prev.foodControl || { mode: 'basket', basketItems: [], monthlyLimit: 20000 };
+      const updatedControl: FoodControlState = {
+        ...current,
+        mode,
+        lastUpdated: new Date().toISOString(),
+      };
+      return {
+        ...prev,
+        foodControl: updatedControl,
+      };
+    });
+  };
+
+  const updateBasketItem = (id: string, updated: Partial<FoodItem>) => {
+    setState(prev => {
+      const current = prev.foodControl || { mode: 'basket', basketItems: [], monthlyLimit: 20000 };
+      const items = (current.basketItems || []).map(i => i.id === id ? { ...i, ...updated, lastUpdated: new Date().toISOString() } : i);
+      const basketTotal = calculateBasketTotal(items);
+      return {
+        ...prev,
+        foodControl: {
+          ...current,
+          basketItems: items,
+          basketTotal,
+          lastUpdated: new Date().toISOString(),
+        },
+      };
+    });
+  };
+
+  const addBasketItem = (item: Omit<FoodItem, 'id' | 'lastUpdated'>) => {
+    setState(prev => {
+      const current = prev.foodControl || { mode: 'basket', basketItems: [], monthlyLimit: 20000 };
+      const newItem: FoodItem = {
+        ...item,
+        id: `food-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        lastUpdated: new Date().toISOString(),
+      };
+      const items = [newItem, ...(current.basketItems || [])];
+      const basketTotal = calculateBasketTotal(items);
+      return {
+        ...prev,
+        foodControl: {
+          ...current,
+          basketItems: items,
+          basketTotal,
+          lastUpdated: new Date().toISOString(),
+        },
+      };
+    });
+  };
+
+  const removeBasketItem = (id: string) => {
+    setState(prev => {
+      const current = prev.foodControl || { mode: 'basket', basketItems: [], monthlyLimit: 20000 };
+      const items = (current.basketItems || []).filter(i => i.id !== id);
+      const basketTotal = calculateBasketTotal(items);
+      return {
+        ...prev,
+        foodControl: {
+          ...current,
+          basketItems: items,
+          basketTotal,
+          lastUpdated: new Date().toISOString(),
+        },
+      };
+    });
+  };
+
+  const updateFoodLimit = (limit: number) => {
+    setState(prev => {
+      const current = prev.foodControl || { mode: 'simple', basketItems: [], monthlyLimit: 20000 };
+      return {
+        ...prev,
+        foodControl: {
+          ...current,
+          monthlyLimit: limit,
+          lastUpdated: new Date().toISOString(),
+        },
+      };
+    });
+  };
+
+  const syncFoodPlanWithBudget = () => {
+    setState(prev => {
+      const food = prev.foodControl;
+      if (!food) return prev;
+
+      // Удаляем старые связанные продуктовые статьи
+      const filteredPlanned = (prev.plannedItems || []).filter(
+        p => p.type !== 'food' && p.type !== 'food_basket' && p.type !== 'food_discretionary' && !p.title.toLowerCase().includes('продукты (корзина)') && !p.title.toLowerCase().includes('продукты (лимит)')
+      );
+
+      const totalSpent = calculateTotalFoodSpentInPeriod(prev.days || [], prev.periodStartDate, prev.periodEndDate);
+      const newPlans: PlannedItem[] = [];
+
+      if (food.mode === 'simple') {
+        const amount = food.monthlyLimit || 20000;
+        newPlans.push({
+          id: `plan_food_simple_${Date.now()}`,
+          title: 'Продукты питания',
+          amount,
+          spentAmount: totalSpent,
+          isProgressTracked: true,
+          category: 'покупки',
+          isPaid: false,
+          notes: 'Базовый лимит на покупку продуктов',
+          type: 'food',
+          period: 'current',
+          autoRenew: true,
+        });
+      } else if (food.mode === 'basket') {
+        const basketTotal = food.basketTotal || calculateBasketTotal(food.basketItems || []);
+        newPlans.push({
+          id: `plan_food_basket_${Date.now()}`,
+          title: 'Потребительская корзина',
+          amount: basketTotal,
+          spentAmount: totalSpent,
+          isProgressTracked: true,
+          category: 'покупки',
+          isPaid: false,
+          notes: `Базовые продукты (${food.basketItems?.length || 0} позиций)`,
+          type: 'food_basket',
+          period: 'current',
+          autoRenew: true,
+        });
+      } else if (food.mode === 'hybrid') {
+        const basketTotal = food.basketTotal || calculateBasketTotal(food.basketItems || []);
+        const discLimit = food.monthlyLimit || 3000;
+        
+        const basketSpent = Math.min(basketTotal, Math.round(totalSpent * 0.8));
+        const discSpent = Math.max(0, totalSpent - basketSpent);
+
+        newPlans.push({
+          id: `plan_food_hybrid_basket_${Date.now()}`,
+          title: 'Базовые продукты (Корзина)',
+          amount: basketTotal,
+          spentAmount: basketSpent,
+          isProgressTracked: true,
+          category: 'покупки',
+          isPaid: false,
+          notes: `Потребительская корзина (${food.basketItems?.length || 0} позиций)`,
+          type: 'food_basket',
+          period: 'current',
+          autoRenew: true,
+        });
+
+        newPlans.push({
+          id: `plan_food_hybrid_disc_${Date.now()}`,
+          title: 'Прочие продукты (Дискреционные)',
+          amount: discLimit,
+          spentAmount: discSpent,
+          isProgressTracked: true,
+          category: 'покупки',
+          isPaid: false,
+          notes: 'Сладости, напитки, снэки и спонтанные покупки',
+          type: 'food_discretionary',
+          period: 'current',
+          autoRenew: true,
+        });
+      }
+
+      return {
+        ...prev,
+        plannedItems: [...filteredPlanned, ...newPlans],
+      };
+    });
+  };
+
+  // User profile & preferences
+  const updateUserProfile = (settings: { userName?: string; currency?: string; includeAdvanceInBudget?: boolean }) => {
+    setState(prev => ({
+      ...prev,
+      ...settings,
+    }));
+  };
+
+  // Financial profile update
+  const updateFinancialProfileState = (settings: {
+    salaryDateDay: number;
+    advanceDateDay?: number;
+    currentSalary?: number;
+    hasAdvance?: boolean;
+    cushionNormMode?: 'percent' | 'fixed';
+    cushionNormPercent?: number;
+    cushionNormFixedAmount?: number;
+    includeAdvanceInBudget?: boolean;
+    advanceTreatment?: 'include' | 'separate';
+  }) => {
+    setState(prev => {
+      const newSalary = settings.currentSalary !== undefined ? settings.currentSalary : prev.currentSalary;
+      const newSalaryDay = settings.salaryDateDay || prev.salaryDateDay || 5;
+      const newAdvanceDay = settings.advanceDateDay !== undefined ? settings.advanceDateDay : (prev.advanceDateDay || 20);
+      const newNormMode = settings.cushionNormMode || prev.cushionNormMode || 'percent';
+      const newNormPct = settings.cushionNormPercent !== undefined ? settings.cushionNormPercent : (prev.cushionNormPercent ?? 10);
+      const newNormFixed = settings.cushionNormFixedAmount !== undefined ? settings.cushionNormFixedAmount : (prev.cushionNormFixedAmount ?? 8265);
+      
+      const newNormContribution = calculateMonthlyCushionNorm(newSalary, newNormMode, newNormPct, newNormFixed);
+
+      const updatedSchedule = generateDynamicCushionSchedule({
+        currentSalary: newSalary,
+        isDepositMade: prev.isCushionDepositDoneThisMonth ?? true,
+        actualDepositAmount: prev.actualCushionDepositThisMonth ?? newNormContribution,
+        bankAccumulated: prev.cushionAccumulated,
+        startMonth: 8,
+        startYear: 2026,
+        normMode: newNormMode,
+        normPercent: newNormPct,
+        normFixedAmount: newNormFixed,
+      });
+
+      // Update financial profile sub-object if present
+      const updatedProfile: FinancialProfile | undefined = prev.financialProfile ? {
+        ...prev.financialProfile,
+        mainSalaryDate: newSalaryDay,
+        advanceDate: settings.hasAdvance ? newAdvanceDay : undefined,
+        fixedPartAmount: newSalary,
+        advanceTreatment: settings.advanceTreatment || (settings.includeAdvanceInBudget ? 'include' : 'separate'),
+        periodStartDay: newSalaryDay,
+      } : undefined;
+
+      return {
+        ...prev,
+        salaryDateDay: newSalaryDay,
+        advanceDateDay: newAdvanceDay,
+        currentSalary: newSalary,
+        safetyCushionDeposit: newNormContribution,
+        cushionMonthlyContribution: newNormContribution,
+        cushionNormMode: newNormMode,
+        cushionNormPercent: newNormPct,
+        cushionNormFixedAmount: newNormFixed,
+        includeAdvanceInBudget: settings.includeAdvanceInBudget ?? prev.includeAdvanceInBudget,
+        cushionSchedule: updatedSchedule,
+        financialProfile: updatedProfile,
+      };
+    });
+  };
+
+  // Import JSON state
+  const importBudgetState = (newState: BudgetState): { success: boolean; message: string } => {
+    try {
+      setState(newState);
+      setSelectedDate(newState.todayDate || INITIAL_BUDGET_STATE.todayDate);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+      if (user) {
+        const userDocRef = doc(db, 'users', user.uid, 'budgetData', 'state');
+        safeSetDoc(userDocRef, { ...newState, updatedAt: new Date().toISOString() }, { merge: true });
+      }
+      return { success: true, message: 'Данные успешно импортированы' };
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Ошибка при импорте данных' };
+    }
+  };
+
+  // <-- ДОБАВЛЕНО: функция инициализации из профиля
+  const initializeBudgetFromProfile = (newProfile: FinancialProfile) => {
+    setState(prev => {
+      const newState = buildInitialStateFromProfile(newProfile, prev);
+      const combined = {
+        ...newState,
+        creditCards: prev.creditCards && prev.creditCards.length > 0 ? prev.creditCards : newState.creditCards,
+        plannedItems: prev.plannedItems && prev.plannedItems.length > 0 ? prev.plannedItems : newState.plannedItems,
+        regularExpensesAnalyzed: prev.regularExpensesAnalyzed ?? false,
+        ignoredMerchants: prev.ignoredMerchants ?? [],
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
+      if (user) {
+        const userDocRef = doc(db, 'users', user.uid, 'budgetData', 'state');
+        safeSetDoc(userDocRef, { ...combined, updatedAt: new Date().toISOString() }, { merge: true });
+      }
+      return combined;
+    });
+  };
+
   const resetToDefaults = () => {
     setState(INITIAL_BUDGET_STATE);
     setSelectedDate(INITIAL_BUDGET_STATE.todayDate);
@@ -2398,6 +3646,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         updateBudgetSettings,
         startNewPeriod,
+        receiveSalary,
         ensureDaysForMonth,
         resetToDefaults,
 
@@ -2423,6 +3672,47 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         updateBankAccountBalance,
         addBankAccount,
         removeBankAccount,
+
+        // Credit Cards actions
+        addCreditCard,
+        updateCreditCard,
+        removeCreditCard,
+        updateCreditCardDebt,
+        refreshCreditCardGracePeriod,
+
+        // Regular Expenses AI actions
+        analyzeRegularExpenses,
+        applySuggestedPlans,
+        setRegularExpensesAnalyzed,
+        ignoreMerchant,
+        togglePlannedItemAutoRenew,
+        getPaymentDateAdvice,
+
+        // Food & Groceries Management actions
+        setFoodControl,
+        setFoodMode,
+        updateBasketItem,
+        addBasketItem,
+        removeBasketItem,
+        updateFoodLimit,
+        syncFoodPlanWithBudget,
+        totalFoodSpentThisPeriod,
+
+        // Marketplace sync actions
+        connectMarketplace,
+        disconnectMarketplace,
+        syncMarketplaceOrders,
+        cancelMarketplaceOrder,
+        receiveMarketplaceOrder,
+        recordMarketplaceWalletTopup,
+
+        // Profile & Data Management actions
+        updateUserProfile,
+        updateFinancialProfileState,
+        importBudgetState,
+
+        // <-- ДОБАВЛЕНО
+        initializeBudgetFromProfile,
       }}
     >
       {children}
@@ -2452,3 +3742,5 @@ export function formatRubles(amount: number, options?: { showCents?: boolean; si
   }
   return `${isNegative ? '-' : ''}${formatted} ₽`;
 }
+
+export { getTodayDateString };

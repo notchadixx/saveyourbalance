@@ -17,6 +17,8 @@ export const AddPlannedModal: React.FC<AddPlannedModalProps> = ({ isOpen, onClos
   const [notes, setNotes] = useState('');
   const [isProgressTracked, setIsProgressTracked] = useState(false);
   const [initialSpent, setInitialSpent] = useState('');
+  const [typicalDay, setTypicalDay] = useState<string>('');
+  const [autoRenew, setAutoRenew] = useState<boolean>(true);
 
   if (!isOpen) return null;
 
@@ -26,6 +28,7 @@ export const AddPlannedModal: React.FC<AddPlannedModalProps> = ({ isOpen, onClos
     if (isNaN(numAmount) || numAmount <= 0 || !title.trim()) return;
 
     const numSpent = initialSpent ? parseFloat(initialSpent.replace(/\s+/g, '').replace(',', '.')) : 0;
+    const parsedDay = typicalDay ? parseInt(typicalDay, 10) : undefined;
 
     addPlannedItem({
       title: title.trim(),
@@ -35,6 +38,9 @@ export const AddPlannedModal: React.FC<AddPlannedModalProps> = ({ isOpen, onClos
       notes: notes.trim() || undefined,
       isProgressTracked: isProgressTracked || title.toLowerCase().includes('бенз') || title.toLowerCase().includes('топлив'),
       spentAmount: !isNaN(numSpent) ? numSpent : 0,
+      typicalDay: parsedDay && parsedDay >= 1 && parsedDay <= 31 ? parsedDay : undefined,
+      autoRenew: autoRenew,
+      type: 'regular'
     });
 
     setTitle('');
@@ -42,6 +48,8 @@ export const AddPlannedModal: React.FC<AddPlannedModalProps> = ({ isOpen, onClos
     setNotes('');
     setIsProgressTracked(false);
     setInitialSpent('');
+    setTypicalDay('');
+    setAutoRenew(true);
     onClose();
   };
 
@@ -109,20 +117,47 @@ export const AddPlannedModal: React.FC<AddPlannedModalProps> = ({ isOpen, onClos
             </div>
           </div>
 
-          <div>
-            <label className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1">
-              Примечание (необязательно)
-            </label>
-            <input
-              type="text"
-              placeholder="Напр. плановый бюджет"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full text-xs font-semibold text-[var(--color-text-main)] bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1">
+                День списания (1–31)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="31"
+                placeholder="5"
+                value={typicalDay}
+                onChange={(e) => setTypicalDay(e.target.value)}
+                className="w-full text-xs font-semibold text-[var(--color-text-main)] bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1">
+                Примечание (необязательно)
+              </label>
+              <input
+                type="text"
+                placeholder="Напр. плановый бюджет"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full text-xs font-semibold text-[var(--color-text-main)] bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
+              />
+            </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] flex flex-col gap-2">
+          <div className="p-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] flex flex-col gap-2.5">
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-[var(--color-text-main)]">
+              <input
+                type="checkbox"
+                checked={autoRenew}
+                onChange={(e) => setAutoRenew(e.target.checked)}
+                className="w-4 h-4 rounded text-[var(--color-accent)] focus:ring-[var(--color-accent)] cursor-pointer"
+              />
+              <span>Автопродление на следующий финансовый период</span>
+            </label>
+
             <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-[var(--color-text-main)]">
               <input
                 type="checkbox"

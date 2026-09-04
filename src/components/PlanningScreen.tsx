@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useBudget, formatRubles } from '../context/BudgetContext';
 import { 
   Plus, 
@@ -17,10 +17,18 @@ import {
   X,
   Calendar,
   ArrowRightLeft,
-  RotateCcw
+  RotateCcw,
+  Sparkles,
+  Repeat,
+  Info,
+  ShoppingBasket
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { PlannedItem } from '../types';
+import { CreditCardDebtSection } from './CreditCardDebtSection';
+import { RegularExpensesModal } from './RegularExpensesModal';
+import { FoodBasketModal } from './FoodBasketModal';
+import { MarketplaceSyncModal } from './MarketplaceSyncModal';
 
 interface PlanningScreenProps {
   onOpenAddPlanned: () => void;
@@ -36,14 +44,18 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
     addSpentToPlannedItem,
     movePlannedToWishlist,
     transferPlannedItemPeriod,
+    togglePlannedItemAutoRenew,
     freeDiscretionaryBudget,
     baseDailyNorm
   } = useBudget();
 
-  const [activePeriodTab, setActivePeriodTab] = useState<'current' | 'next' | 'future' | 'all'>('current');
+  const [activePeriodTab, setActivePeriodTab] = useState<'current' | 'next' | 'future' | 'previous' | 'all'>('current');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editSpentVal, setEditSpentVal] = useState<string>('');
+  const [isRegularExpensesModalOpen, setIsRegularExpensesModalOpen] = useState<boolean>(false);
+  const [isFoodBasketModalOpen, setIsFoodBasketModalOpen] = useState<boolean>(false);
+  const [isMarketplaceModalOpen, setIsMarketplaceModalOpen] = useState<boolean>(false);
 
   // Full item editing state (inline on card)
   const [fullEditId, setFullEditId] = useState<string | null>(null);
@@ -53,6 +65,8 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
   const [editNotes, setEditNotes] = useState<string>('');
   const [editSpentAmount, setEditSpentAmount] = useState<string>('0');
   const [editIsProgressTracked, setEditIsProgressTracked] = useState<boolean>(false);
+  const [editTypicalDay, setEditTypicalDay] = useState<string>('');
+  const [editAutoRenew, setEditAutoRenew] = useState<boolean>(true);
 
   // Transfer period dropdown state
   const [transferMenuId, setTransferMenuId] = useState<string | null>(null);
@@ -60,12 +74,24 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
   // Filter items by period tab
   const periodItems = state.plannedItems.filter(item => {
     const itemPeriod = item.period || 'current';
-    if (activePeriodTab === 'all') return true;
     if (activePeriodTab === 'current') return itemPeriod === 'current';
     if (activePeriodTab === 'next') return itemPeriod === 'next';
-    if (activePeriodTab === 'future') return itemPeriod !== 'current' && itemPeriod !== 'next';
+    if (activePeriodTab === 'future') return itemPeriod !== 'current' && itemPeriod !== 'next' && itemPeriod !== 'previous';
+    if (activePeriodTab === 'previous') return itemPeriod === 'previous';
+    if (activePeriodTab === 'all') return itemPeriod !== 'previous';
     return true;
   });
+
+  // Dynamic month names for tabs
+  const { curShortMonth, nextShortMonth, prevShortMonth } = useMemo(() => {
+    const months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+    const parts = (state.periodStartDate || '2026-09-04').split('-');
+    const m = (parseInt(parts[1], 10) || 9) - 1; // 0-based
+    const curShort = months[m];
+    const nextShort = months[(m + 1) % 12];
+    const prevShort = months[(m - 1 + 12) % 12];
+    return { curShortMonth: curShort, nextShortMonth: nextShort, prevShortMonth: prevShort };
+  }, [state.periodStartDate]);
 
   // Current month active calculations
   const currentMonthItems = state.plannedItems.filter(i => !i.period || i.period === 'current');
@@ -104,6 +130,8 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
     setEditCategory(item.category);
     setEditNotes(item.notes || '');
     setEditIsProgressTracked(Boolean(item.isProgressTracked || item.title.toLowerCase().includes('бенз')));
+    setEditTypicalDay(item.typicalDay ? item.typicalDay.toString() : '');
+    setEditAutoRenew(item.autoRenew !== false);
     setTransferMenuId(null);
   };
 
@@ -113,6 +141,8 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
     const parsedSpent = parseFloat(editSpentAmount.replace(/\s+/g, '').replace(',', '.'));
     if (isNaN(parsedAmount) || parsedAmount <= 0) return;
 
+    const parsedDay = editTypicalDay ? parseInt(editTypicalDay, 10) : undefined;
+
     updatePlannedItem(itemId, {
       title: editTitle.trim() || 'Статья расхода',
       amount: parsedAmount,
@@ -120,6 +150,8 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
       category: editCategory as any,
       notes: editNotes.trim(),
       isProgressTracked: editIsProgressTracked,
+      typicalDay: parsedDay && parsedDay >= 1 && parsedDay <= 31 ? parsedDay : undefined,
+      autoRenew: editAutoRenew,
     });
 
     setFullEditId(null);
@@ -263,6 +295,9 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
         </div>
       </div>
 
+      {/* Credit Cards Debt Repayment Section (renders only if debt cards exist) */}
+      <CreditCardDebtSection />
+
       {/* 3. Period Selection Tabs */}
       <div className="bg-[var(--color-bg-card)] rounded-2xl p-2.5 shadow-xs border border-[var(--color-border)] flex flex-col gap-2">
         <div className="flex justify-between items-center px-1">
@@ -275,30 +310,30 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
           <button
             onClick={() => setActivePeriodTab('current')}
-            className={`py-2 px-1.5 sm:px-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all text-center whitespace-nowrap truncate cursor-pointer ${
+            className={`py-2 px-1.5 sm:px-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all text-center whitespace-nowrap truncate cursor-pointer ${
               activePeriodTab === 'current'
                 ? 'bg-[#041627] dark:bg-[#10b981] text-white dark:text-[#041627] shadow-xs'
                 : 'bg-[var(--color-bg-card-subtle)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-main)] border border-[var(--color-border-subtle)]'
             }`}
           >
-            Текущий месяц
+            Текущий ({curShortMonth}) ({currentMonthItems.length})
           </button>
           <button
             onClick={() => setActivePeriodTab('next')}
-            className={`py-2 px-1.5 sm:px-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all text-center whitespace-nowrap truncate cursor-pointer ${
+            className={`py-2 px-1.5 sm:px-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all text-center whitespace-nowrap truncate cursor-pointer ${
               activePeriodTab === 'next'
                 ? 'bg-[#041627] dark:bg-[#10b981] text-white dark:text-[#041627] shadow-xs'
                 : 'bg-[var(--color-bg-card-subtle)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-main)] border border-[var(--color-border-subtle)]'
             }`}
           >
-            След. месяц (Окт)
+            След. месяц ({nextShortMonth})
           </button>
           <button
             onClick={() => setActivePeriodTab('future')}
-            className={`py-2 px-1.5 sm:px-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all text-center whitespace-nowrap truncate cursor-pointer ${
+            className={`py-2 px-1.5 sm:px-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all text-center whitespace-nowrap truncate cursor-pointer ${
               activePeriodTab === 'future'
                 ? 'bg-[#041627] dark:bg-[#10b981] text-white dark:text-[#041627] shadow-xs'
                 : 'bg-[var(--color-bg-card-subtle)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-main)] border border-[var(--color-border-subtle)]'
@@ -307,34 +342,73 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
             Отложенные
           </button>
           <button
+            onClick={() => setActivePeriodTab('previous')}
+            className={`py-2 px-1.5 sm:px-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all text-center whitespace-nowrap truncate cursor-pointer ${
+              activePeriodTab === 'previous'
+                ? 'bg-[#041627] dark:bg-[#10b981] text-white dark:text-[#041627] shadow-xs'
+                : 'bg-[var(--color-bg-card-subtle)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-main)] border border-[var(--color-border-subtle)]'
+            }`}
+          >
+            Архив ({prevShortMonth})
+          </button>
+          <button
             onClick={() => setActivePeriodTab('all')}
-            className={`py-2 px-1.5 sm:px-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all text-center whitespace-nowrap truncate cursor-pointer ${
+            className={`py-2 px-1.5 sm:px-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all text-center whitespace-nowrap truncate cursor-pointer col-span-2 sm:col-span-1 ${
               activePeriodTab === 'all'
                 ? 'bg-[#041627] dark:bg-[#10b981] text-white dark:text-[#041627] shadow-xs'
                 : 'bg-[var(--color-bg-card-subtle)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-main)] border border-[var(--color-border-subtle)]'
             }`}
           >
-            Все ({state.plannedItems.length})
+            Все активные
           </button>
         </div>
       </div>
 
       {/* 4. Category Filter & Add Item */}
       <div className="flex flex-col gap-2">
-        <div className="flex justify-between items-center px-1">
+        <div className="flex justify-between items-center px-1 flex-wrap gap-2">
           <h3 className="text-base font-bold text-[var(--color-text-main)]">
             {activePeriodTab === 'current' && 'Статьи текущего месяца'}
             {activePeriodTab === 'next' && 'Перенесенные на следующий месяц'}
             {activePeriodTab === 'future' && 'Отложенные статьи'}
-            {activePeriodTab === 'all' && 'Все статьи'} ({filteredItems.length})
+            {activePeriodTab === 'previous' && 'Архив планов предыдущего месяца'}
+            {activePeriodTab === 'all' && 'Все активные статьи'} ({filteredItems.length})
           </h3>
-          <button
-            onClick={onOpenAddPlanned}
-            className="flex items-center gap-1 text-xs font-bold text-white bg-[#041627] dark:bg-[#10b981] dark:text-[#041627] hover:bg-[#1a2b3c] dark:hover:bg-[#059669] px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Добавить статью</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setIsMarketplaceModalOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-900/50 px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+              title="Синхронизация с маркетплейсами Wildberries и OZON"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+              <span>WB / OZON</span>
+            </button>
+
+            <button
+              onClick={() => setIsFoodBasketModalOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-900/50 px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+              title="Настройка продуктовой корзины и лимитов"
+            >
+              <ShoppingBasket className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Корзина продуктов</span>
+            </button>
+
+            <button
+              onClick={() => setIsRegularExpensesModalOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-900/50 px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>ИИ Анализ расходов</span>
+            </button>
+
+            <button
+              onClick={onOpenAddPlanned}
+              className="flex items-center gap-1 text-xs font-bold text-white bg-[#041627] dark:bg-[#10b981] dark:text-[#041627] hover:bg-[#1a2b3c] dark:hover:bg-[#059669] px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Добавить статью</span>
+            </button>
+          </div>
         </div>
 
         {/* Categories chips */}
@@ -506,28 +580,55 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
 
                     <div>
                       <label className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase block mb-1">
-                        Примечание
+                        День списания (1–31)
                       </label>
                       <input
-                        type="text"
-                        placeholder="Например: Текущий месяц / Сентябрь"
-                        value={editNotes}
-                        onChange={(e) => setEditNotes(e.target.value)}
-                        className="w-full h-8 px-2.5 bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg text-xs font-medium text-[var(--color-text-main)]"
+                        type="number"
+                        min="1"
+                        max="31"
+                        placeholder="Например: 5"
+                        value={editTypicalDay}
+                        onChange={(e) => setEditTypicalDay(e.target.value)}
+                        className="w-full h-8 px-2.5 bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg text-xs font-semibold text-[var(--color-text-main)]"
                       />
                     </div>
                   </div>
 
-                  {/* Toggle progress tracking */}
-                  <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)] cursor-pointer select-none py-1">
+                  <div>
+                    <label className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase block mb-1">
+                      Примечание
+                    </label>
                     <input
-                      type="checkbox"
-                      checked={editIsProgressTracked}
-                      onChange={(e) => setEditIsProgressTracked(e.target.checked)}
-                      className="w-3.5 h-3.5 rounded border-[var(--color-border)] text-[#006d37] focus:ring-[#006d37]"
+                      type="text"
+                      placeholder="Например: Текущий месяц / Сентябрь"
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      className="w-full h-8 px-2.5 bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg text-xs font-medium text-[var(--color-text-main)]"
                     />
-                    <span className="font-medium">Регулярный расход с мини-шкалой прогресса (План vs Факт)</span>
-                  </label>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 py-1">
+                    <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={editAutoRenew}
+                        onChange={(e) => setEditAutoRenew(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded border-[var(--color-border)] text-[#006d37] focus:ring-[#006d37]"
+                      />
+                      <span className="font-medium">Автоматически продлевать на следующий месяц</span>
+                    </label>
+
+                    {/* Toggle progress tracking */}
+                    <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={editIsProgressTracked}
+                        onChange={(e) => setEditIsProgressTracked(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded border-[var(--color-border)] text-[#006d37] focus:ring-[#006d37]"
+                      />
+                      <span className="font-medium">Регулярный расход с мини-шкалой прогресса (План vs Факт)</span>
+                    </label>
+                  </div>
 
                   <div className="flex items-center justify-between pt-1.5 border-t border-[var(--color-border-subtle)]">
                     <div className="flex items-center gap-1.5">
@@ -596,6 +697,18 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
                           }`}>
                             {isOverBudget ? 'Перерасход' : 'Шкала прогресса'}
                           </span>
+                          {item.isAutoGenerated && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20 flex items-center gap-1">
+                              <Sparkles className="w-2.5 h-2.5 text-blue-500" />
+                              ИИ-план
+                            </span>
+                          )}
+                          {item.typicalDay && (
+                            <span className="text-[10px] font-medium text-[var(--color-text-secondary)] flex items-center gap-0.5 bg-[var(--color-bg-card-subtle)] px-2 py-0.5 rounded-full border border-[var(--color-border-subtle)]">
+                              <Calendar className="w-2.5 h-2.5 text-blue-500" />
+                              {item.typicalDay}-е число
+                            </span>
+                          )}
                           {isTransferred && (
                             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20">
                               {item.period === 'next' ? 'Октябрь 2026' : 'Отложено'}
@@ -688,9 +801,7 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
                         className={`h-full rounded-full transition-all duration-500 ${
                           isOverBudget 
                             ? 'bg-rose-500' 
-                            : percent > 80 
-                              ? 'bg-amber-500' 
-                              : 'bg-[#006d37] dark:bg-[#10b981]'
+                            : 'bg-[#006d37] dark:bg-[#10b981]'
                         }`}
                         style={{ width: `${Math.min(100, percent)}%` }}
                       />
@@ -808,8 +919,36 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
                     </div>
 
                     <div>
-                      <div className={`text-sm font-bold ${item.isPaid ? 'text-[var(--color-text-muted)] line-through' : 'text-[var(--color-text-main)]'}`}>
-                        {item.title}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-sm font-bold ${item.isPaid ? 'text-[var(--color-text-muted)] line-through' : 'text-[var(--color-text-main)]'}`}>
+                          {item.title}
+                        </span>
+                        {item.type === 'food_basket' && (
+                          <button
+                            onClick={() => setIsFoodBasketModalOpen(true)}
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 flex items-center gap-1 hover:bg-emerald-500/20 transition-colors"
+                          >
+                            <ShoppingBasket className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
+                            Корзина
+                          </button>
+                        )}
+                        {item.type === 'food_discretionary' && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 flex items-center gap-1">
+                            Дискреционные
+                          </span>
+                        )}
+                        {item.isAutoGenerated && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20 flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5 text-blue-500" />
+                            ИИ-план
+                          </span>
+                        )}
+                        {item.typicalDay && (
+                          <span className="text-[10px] font-medium text-[var(--color-text-secondary)] flex items-center gap-0.5 bg-[var(--color-bg-card-subtle)] px-2 py-0.5 rounded-full border border-[var(--color-border-subtle)]">
+                            <Calendar className="w-2.5 h-2.5 text-blue-500" />
+                            {item.typicalDay}-е число
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1.5 flex-wrap">
                         <span>{item.notes || item.category}</span>
@@ -856,6 +995,19 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
                     >
                       <Edit2 className="w-3 h-3" />
                       <span>Редактировать</span>
+                    </button>
+
+                    <button
+                      onClick={() => togglePlannedItemAutoRenew(item.id)}
+                      title="Нажмите, чтобы переключить автопродление на следующий месяц"
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg border flex items-center gap-1 transition-all cursor-pointer ${
+                        item.autoRenew !== false
+                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
+                          : 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20'
+                      }`}
+                    >
+                      <Repeat className="w-2.5 h-2.5" />
+                      <span>{item.autoRenew !== false ? 'Авто' : 'Разовый'}</span>
                     </button>
 
                     {/* Period Transfer Dropdown */}
@@ -924,6 +1076,21 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
           })
         )}
       </div>
+
+      <RegularExpensesModal
+        isOpen={isRegularExpensesModalOpen}
+        onClose={() => setIsRegularExpensesModalOpen(false)}
+      />
+
+      <FoodBasketModal
+        isOpen={isFoodBasketModalOpen}
+        onClose={() => setIsFoodBasketModalOpen(false)}
+      />
+
+      <MarketplaceSyncModal
+        isOpen={isMarketplaceModalOpen}
+        onClose={() => setIsMarketplaceModalOpen(false)}
+      />
     </div>
   );
 };

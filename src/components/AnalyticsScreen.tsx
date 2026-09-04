@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useBudget, formatRubles } from '../context/BudgetContext';
+import { useBudget, formatRubles, getTodayDateString } from '../context/BudgetContext';
 import { PeriodDropdownSelector } from './PeriodDropdownSelector';
+import { CreditCardAnalyticsWidget } from './CreditCardAnalyticsWidget';
+import { FoodAnalyticsWidget } from './FoodAnalyticsWidget';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -39,14 +41,16 @@ export const AnalyticsScreen: React.FC = () => {
 
   // All active days up to today or with spend
   const chartDays = useMemo(() => {
-    if (periodDays.length === 0) return state.days.filter(d => d.spent > 0 || d.date <= state.todayDate);
+    const todayStr = state.todayDate || getTodayDateString();
+    if (periodDays.length === 0) return state.days.filter(d => d.spent > 0 || d.date <= todayStr);
     return periodDays;
   }, [periodDays, state.days, state.todayDate]);
 
   // Deviation list items sorted from recent to oldest
   const deviationDays = useMemo(() => {
+    const todayStr = state.todayDate || getTodayDateString();
     return chartDays
-      .filter(d => d.spent > 0 || d.date <= state.todayDate)
+      .filter(d => d.spent > 0 || d.date <= todayStr)
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [chartDays, state.todayDate]);
 
@@ -60,12 +64,19 @@ export const AnalyticsScreen: React.FC = () => {
   const maxSpend = Math.max(...chartDays.map(d => d.spent), baseDailyNorm * 1.5, 1800);
   const chartHeight = 150;
 
-  // Auto scroll to today / latest day on load
+  // Auto scroll to today on load
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+      const todayEl = scrollRef.current.querySelector<HTMLElement>('[data-is-today="true"]');
+      if (todayEl) {
+        const container = scrollRef.current;
+        const scrollTarget = todayEl.offsetLeft - container.clientWidth / 2 + todayEl.clientWidth / 2;
+        container.scrollTo({ left: Math.max(0, scrollTarget), behavior: 'smooth' });
+      } else {
+        scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+      }
     }
-  }, [activeViewingPeriod]);
+  }, [activeViewingPeriod, chartDays, state.todayDate]);
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
@@ -204,11 +215,12 @@ export const AnalyticsScreen: React.FC = () => {
               const barHeight = Math.max(8, (day.spent / maxSpend) * chartHeight);
               const dayLabel = `${day.dayNumber < 10 ? '0' : ''}${day.dayNumber}.${day.date.split('-')[1]}`;
               const isHovered = hoveredDay === day.date;
-              const isToday = day.date === state.todayDate || day.date === '2026-08-31';
+              const isToday = day.date === (state.todayDate || getTodayDateString());
 
               return (
                 <div 
                   key={day.date}
+                  data-is-today={isToday ? "true" : undefined}
                   className="flex-shrink-0 w-11 flex flex-col items-center group relative cursor-pointer select-none"
                   onMouseEnter={() => setHoveredDay(day.date)}
                   onMouseLeave={() => setHoveredDay(null)}
@@ -274,7 +286,13 @@ export const AnalyticsScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* 5. Deviations from Norm List (Actualized with 31.08) */}
+      {/* Credit Cards Analytics Widget (renders only if credit cards exist) */}
+      <CreditCardAnalyticsWidget />
+
+      {/* Food Basket Analytics & Inflation Breakdown */}
+      <FoodAnalyticsWidget />
+
+      {/* 5. Deviations from Norm List */}
       <div className="flex flex-col gap-2.5">
         <div className="flex justify-between items-center px-1">
           <h3 className="text-base font-bold text-[var(--color-text-main)]">
@@ -341,8 +359,8 @@ export const AnalyticsScreen: React.FC = () => {
                   <div>
                     <div className="text-sm font-bold text-[var(--color-text-main)] flex items-center gap-1.5">
                       <span>{day.dayNumber} {monthRu}, {day.dayOfWeekShort}</span>
-                      {day.date === '2026-08-31' && (
-                        <span className="text-[10px] font-bold bg-[var(--color-accent)] text-white dark:text-[#041627] px-1.5 py-0.2 rounded">
+                      {day.date === (state.todayDate || getTodayDateString()) && (
+                        <span className="text-[10px] font-bold bg-[var(--color-accent)] text-white dark:text-[#041627] px-1.5 py-0.5 rounded shadow-xs">
                           Сегодня
                         </span>
                       )}

@@ -23,6 +23,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { ExpenseCategory, ExpenseItem } from '../types';
 import { BankSyncModal } from './BankSyncModal';
+import { CreditCardOptimizerWidget } from './CreditCardOptimizerWidget';
+import { FoodBudgetWidget } from './FoodBudgetWidget';
 
 interface TodayScreenProps {
   onOpenAddExpense?: () => void;
@@ -187,8 +189,17 @@ export const TodayScreen: React.FC<TodayScreenProps> = () => {
     setEditingExpenseId(null);
   };
 
+  const formatDays = (n: number) => {
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod100 >= 11 && mod100 <= 19) return `${n} дней`;
+    if (mod10 === 1) return `${n} день`;
+    if (mod10 >= 2 && mod10 <= 4) return `${n} дня`;
+    return `${n} дней`;
+  };
+
   return (
-    <div className="flex flex-col gap-4 pb-28 pt-2 relative">
+    <div className="flex flex-col gap-4 pb-6 pt-2 relative">
       {/* Header Info */}
       <div className="flex justify-between items-end px-1">
         <div className="flex flex-col">
@@ -205,7 +216,7 @@ export const TodayScreen: React.FC<TodayScreenProps> = () => {
         <div className="flex flex-col text-right">
           <span className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider">Осталось дней</span>
           <span className="text-sm font-bold text-[var(--color-text-body)] bg-[var(--color-bg-card-muted)] px-2 py-0.5 rounded-md border border-[var(--color-border-subtle)]">
-            {daysToSalary} дней
+            {formatDays(daysToSalary)}
           </span>
         </div>
       </div>
@@ -286,6 +297,12 @@ export const TodayScreen: React.FC<TodayScreenProps> = () => {
           (базовая норма: {formatRubles(baseDailyNorm, { showCents: false })})
         </p>
 
+        {!state.isSalaryReceived && (
+          <div className="mt-2.5 inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/40 px-2.5 py-1 rounded-full">
+            <span>Ожидается зарплата • Доступно с прошлого месяца: {formatRubles(state.previousMonthRemainder, { showCents: false })}</span>
+          </div>
+        )}
+
         {todayAllowedSpend > baseDailyNorm && (
           <div className="mt-2.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--color-accent-badge-text)] bg-[var(--color-accent-badge-bg)] border border-[var(--color-accent-badge-border)] px-2.5 py-1 rounded-full">
             <Sparkles className="w-3 h-3" />
@@ -357,6 +374,12 @@ export const TodayScreen: React.FC<TodayScreenProps> = () => {
           </span>
         </div>
       </section>
+
+      {/* Optimizer Credit Cards Grace Tracker (renders only if optimizer cards exist) */}
+      <CreditCardOptimizerWidget />
+
+      {/* Food & Groceries Management Widget */}
+      <FoodBudgetWidget />
 
       {/* Today's Registered Expenses List with INLINE ADD and INLINE EDIT */}
       <section className="bg-[var(--color-bg-card)] rounded-2xl p-4 shadow-xs border border-[var(--color-border)] flex flex-col gap-3">
@@ -828,10 +851,10 @@ export const TodayScreen: React.FC<TodayScreenProps> = () => {
 
               <div className="flex flex-col gap-2 text-xs text-[var(--color-text-secondary)] leading-relaxed">
                 <p>
-                  Эту сумму вы накопили <strong>суммарно за текущий месяц</strong> за счёт соблюдения и экономии дневных лимитов.
+                  Сумма всех ежедневных сальдо (<strong>отклонений от нормы</strong>) за расчетный период <strong>{currentPeriodTemplate?.formattedLabel || '05.08.2026 — 03.09.2026'}</strong>.
                 </p>
                 <p>
-                  Она прогнозирует ваш <strong>свободный остаток на конец периода (04.09.2026)</strong>.
+                  Она прогнозирует ваш <strong>свободный остаток на конец периода</strong>. Точно соответствует итоговой сумме сальдо из раздела «Анализ».
                 </p>
                 
                 <div className="bg-[var(--color-bg-card-subtle)] p-2.5 rounded-xl border border-[var(--color-border)] flex flex-col gap-1.5 mt-1">

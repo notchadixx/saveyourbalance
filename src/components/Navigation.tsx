@@ -19,17 +19,19 @@ import {
   CloudCheck,
   User as UserIcon,
   LogIn,
-  Landmark
+  Landmark,
+  Settings
 } from 'lucide-react';
 import { AuthModal } from './AuthModal';
 import { BankSyncModal } from './BankSyncModal';
+import { ProfileScreen } from './Profile/ProfileScreen';
 
 interface NavigationProps {
   onOpenAddExpense?: () => void;
   onOpenSettings?: () => void;
 }
 
-export const TopBar: React.FC<NavigationProps> = ({ onOpenAddExpense }) => {
+export const TopBar: React.FC<NavigationProps> = ({ onOpenAddExpense, onOpenSettings }) => {
   const { 
     activeTab, 
     isMobileFrame, 
@@ -45,6 +47,15 @@ export const TopBar: React.FC<NavigationProps> = ({ onOpenAddExpense }) => {
   const { user } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [isInternalProfileOpen, setIsInternalProfileOpen] = useState(false);
+
+  const handleOpenSettings = () => {
+    if (onOpenSettings) {
+      onOpenSettings();
+    } else {
+      setIsInternalProfileOpen(true);
+    }
+  };
 
   const getTitle = () => {
     switch (activeTab) {
@@ -176,6 +187,17 @@ export const TopBar: React.FC<NavigationProps> = ({ onOpenAddExpense }) => {
             <RotateCcw className="w-4 h-4" />
           </button>
 
+          {/* Settings / Profile Screen Trigger */}
+          <button
+            onClick={handleOpenSettings}
+            title="Профиль и настройки"
+            aria-label="Открыть настройки и профиль"
+            className="p-1.5 sm:px-2 sm:py-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-main)] hover:border-[var(--color-border-strong)] transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
+          >
+            <Settings className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span className="hidden lg:inline text-xs font-bold">Настройки</span>
+          </button>
+
           {/* Quick Add Expense */}
           {onOpenAddExpense && (
             <button
@@ -197,6 +219,11 @@ export const TopBar: React.FC<NavigationProps> = ({ onOpenAddExpense }) => {
       <BankSyncModal
         isOpen={isBankModalOpen}
         onClose={() => setIsBankModalOpen(false)}
+      />
+
+      <ProfileScreen
+        isOpen={isInternalProfileOpen}
+        onClose={() => setIsInternalProfileOpen(false)}
       />
     </>
   );
@@ -242,7 +269,9 @@ export const BottomNavBar: React.FC = () => {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-[var(--color-bg-nav)] border-t border-[var(--color-border)] z-50 shadow-lg backdrop-blur-md transition-colors duration-200">
+    <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-[var(--color-bg-card)] border-t border-[var(--color-border-strong)] z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.12)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.5)] transition-colors duration-200">
+      {/* Accent top separator line */}
+      <div className="w-full h-[1px] bg-[var(--color-border)]" />
       <div className="flex justify-around items-center px-1 pb-3 pt-1.5">
         {tabs.map(tab => {
           const isActive = activeTab === tab.id || (tab.id === 'today' && activeTab === 'confirm-expenses');

@@ -47,6 +47,7 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
     daysToSalary, 
     freeDiscretionaryBudget,
     totalIncludedAdditionalIncomes,
+    receiveSalary,
     addExpenseToDate,
     updateExpense,
     deleteExpenseFromDate 
@@ -193,18 +194,39 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
           {formatRubles(state.total30DaysBudget, { showCents: false })}
         </div>
 
+        {/* Informative banner when waiting for salary arrival */}
+        {!state.isSalaryReceived && (
+          <div className="mb-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/40 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
+              <div className="text-xs text-blue-900 dark:text-blue-200">
+                <span className="font-bold">Ожидается поступление зарплаты.</span>
+                <span className="block text-[11px] text-blue-700 dark:text-blue-300">
+                  До зачисления бюджет равен чистому остатку прошлого месяца ({formatRubles(state.previousMonthRemainder)})
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => receiveSalary()}
+              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer whitespace-nowrap"
+            >
+              Учесть зарплату ({formatRubles(state.currentSalary)})
+            </button>
+          </div>
+        )}
+
         {/* Budget details breakdown */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 py-2.5 px-3 mb-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] text-xs">
           <div>
             <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">Зарплата</span>
-            <span className="font-bold text-[var(--color-text-main)] truncate block">
-              {formatRubles(state.currentSalary, { showCents: false })}
+            <span className={`font-bold truncate block ${!state.isSalaryReceived ? 'text-amber-600 dark:text-amber-400' : 'text-[var(--color-text-main)]'}`}>
+              {!state.isSalaryReceived ? `Ожид. (${formatRubles(state.currentSalary, { showCents: false })})` : formatRubles(state.actualSalaryAmount || state.currentSalary, { showCents: false })}
             </span>
           </div>
           <div>
             <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">Подушка (10%)</span>
             <span className="font-bold text-[var(--color-text-main)] truncate block">
-              {formatRubles(state.safetyCushionDeposit, { showCents: false })}
+              {!state.isSalaryReceived ? '0 ₽ (при з/п)' : formatRubles(state.safetyCushionDeposit, { showCents: false })}
             </span>
           </div>
           <div>

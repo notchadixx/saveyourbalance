@@ -12,6 +12,22 @@ import {
 import { generatePeriodTemplateForMonth } from './utils/periodUtils';
 
 export function getTodayDateString(): string {
+  try {
+    const now = new Date();
+    // Default to Europe/Moscow timezone as Russian budget app
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const formatted = formatter.format(now);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(formatted)) {
+      return formatted;
+    }
+  } catch {
+    // Fallback to local system time
+  }
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -20,8 +36,8 @@ export function getTodayDateString(): string {
 }
 
 export function getCurrentPeriodDates(baseSalaryDay: number = 5): { startDate: string; endDate: string; title: string } {
-  // Default to August 2026 budget period template (05.08.2026 — 03.09.2026)
-  const template = generatePeriodTemplateForMonth(2026, 8, baseSalaryDay, 20, '2026-08-26');
+  // Today is 2026-09-04, which is the start of the September 2026 budget period (04.09.2026 — 04.10.2026)
+  const template = generatePeriodTemplateForMonth(2026, 9, baseSalaryDay, 20, '2026-09-04');
   return {
     startDate: template.startDateStr,
     endDate: template.endDateStr,
@@ -30,33 +46,37 @@ export function getCurrentPeriodDates(baseSalaryDay: number = 5): { startDate: s
 }
 
 const INITIAL_PLANNED_ITEMS: PlannedItem[] = [
-  { id: 'p1', title: 'Wildberries', amount: 6139.00, category: 'покупки', isPaid: true, notes: 'Одежда и бытовые мелочи', period: 'current' },
-  { id: 'p2', title: 'OZON', amount: 1472.00, category: 'покупки', isPaid: true, notes: 'Заказ товаров для дома', period: 'current' },
-  { id: 'p3', title: 'PS4', amount: 10000.00, category: 'игры_хобби', isPaid: true, notes: 'Игровая приставка', period: 'current' },
-  { id: 'p4', title: 'It takes two', amount: 2950.00, category: 'игры_хобби', isPaid: true, notes: 'Кооперативная игра', period: 'current' },
-  { id: 'p5', title: 'Геймпад', amount: 1250.00, category: 'игры_хобби', isPaid: true, notes: 'Дополнительный джойстик DualShock', period: 'current' },
-  { id: 'p6', title: 'МФУ', amount: 14299.00, category: 'покупки', isPaid: true, notes: 'Принтер/сканер для дома', period: 'current' },
-  { id: 'p7', title: 'Ростелеком', amount: 857.83, category: 'обязательные', isPaid: true, notes: 'Интернет + ТВ тариф', period: 'current' },
+  // 1. Recurring items carried into current period (September)
   { 
     id: 'p8', 
     title: 'Бенз', 
     amount: 18000.00, 
-    spentAmount: 12000.00, 
+    spentAmount: 0.00, 
     isProgressTracked: true, 
     category: 'авто', 
     isPaid: false, 
     period: 'current',
+    autoRenew: true,
     notes: 'Топливо на расчетный период' 
   },
-  { id: 'p9', title: 'DDX', amount: 1900.00, category: 'обязательные', isPaid: true, notes: 'Фитнес-клуб месячный абонемент', period: 'current' },
-  { id: 'p10', title: 'Джоггеры зимние', amount: 3981.00, category: 'покупки', isPaid: true, notes: 'Теплая одежда на осень-зиму', period: 'current' },
-  { id: 'p11', title: 'Полка навесная', amount: 4610.00, category: 'покупки', isPaid: true, notes: 'Мебель для комнаты', period: 'current' },
-  { id: 'p12', title: 'Сход-развал', amount: 2000.00, category: 'авто', isPaid: true, notes: 'Техническое обслуживание подвески', period: 'current' },
-  { id: 'p13', title: 'Наконечник рулевой тяги', amount: 1635.00, category: 'авто', isPaid: true, notes: 'Запчасть для автомобиля', period: 'current' },
-  { id: 'p14', title: 'Новоселье (еда + напитки)', amount: 8147.04, category: 'мероприятия', isPaid: true, notes: 'Празднование новоселья с друзьями', period: 'current' },
-  { id: 'p15', title: 'Подарок Соне', amount: 2500.00, category: 'мероприятия', isPaid: true, notes: 'Подарок на день рождения', period: 'current' },
-  { id: 'p16', title: 'Корректировка', amount: 336.60, category: 'прочее', isPaid: true, notes: 'Банковские комиссии и округления', period: 'current' },
-  { id: 'p17', title: 'Билеты на поезд', amount: 12782.00, category: 'мероприятия', isPaid: true, notes: 'Поездка туда и обратно', period: 'current' },
+  { id: 'p9', title: 'DDX', amount: 1900.00, category: 'обязательные', isPaid: false, notes: 'Фитнес-клуб месячный абонемент', period: 'current', autoRenew: true },
+  { id: 'p7', title: 'Ростелеком', amount: 857.83, category: 'обязательные', isPaid: false, notes: 'Интернет + ТВ тариф', period: 'current', autoRenew: true },
+
+  // 2. Archived completed one-time items from previous period (August)
+  { id: 'p1', title: 'Wildberries', amount: 6139.00, category: 'покупки', isPaid: true, notes: 'Одежда и бытовые мелочи', period: 'previous' },
+  { id: 'p2', title: 'OZON', amount: 1472.00, category: 'покупки', isPaid: true, notes: 'Заказ товаров для дома', period: 'previous' },
+  { id: 'p3', title: 'PS4', amount: 10000.00, category: 'игры_хобби', isPaid: true, notes: 'Игровая приставка', period: 'previous' },
+  { id: 'p4', title: 'It takes two', amount: 2950.00, category: 'игры_хобби', isPaid: true, notes: 'Кооперативная игра', period: 'previous' },
+  { id: 'p5', title: 'Геймпад', amount: 1250.00, category: 'игры_хобби', isPaid: true, notes: 'Дополнительный джойстик DualShock', period: 'previous' },
+  { id: 'p6', title: 'МФУ', amount: 14299.00, category: 'покупки', isPaid: true, notes: 'Принтер/сканер для дома', period: 'previous' },
+  { id: 'p10', title: 'Джоггеры зимние', amount: 3981.00, category: 'покупки', isPaid: true, notes: 'Теплая одежда на осень-зиму', period: 'previous' },
+  { id: 'p11', title: 'Полка навесная', amount: 4610.00, category: 'покупки', isPaid: true, notes: 'Мебель для комнаты', period: 'previous' },
+  { id: 'p12', title: 'Сход-развал', amount: 2000.00, category: 'авто', isPaid: true, notes: 'Техническое обслуживание подвески', period: 'previous' },
+  { id: 'p13', title: 'Наконечник рулевой тяги', amount: 1635.00, category: 'авто', isPaid: true, notes: 'Запчасть для автомобиля', period: 'previous' },
+  { id: 'p14', title: 'Новоселье (еда + напитки)', amount: 8147.04, category: 'мероприятия', isPaid: true, notes: 'Празднование новоселья с друзьями', period: 'previous' },
+  { id: 'p15', title: 'Подарок Соне', amount: 2500.00, category: 'мероприятия', isPaid: true, notes: 'Подарок на день рождения', period: 'previous' },
+  { id: 'p16', title: 'Корректировка', amount: 336.60, category: 'прочее', isPaid: true, notes: 'Банковские комиссии и округления', period: 'previous' },
+  { id: 'p17', title: 'Билеты на поезд', amount: 12782.00, category: 'мероприятия', isPaid: true, notes: 'Поездка туда и обратно', period: 'previous' },
 ];
 
 const INITIAL_WISHLIST: WishlistItem[] = [
@@ -303,23 +323,16 @@ const RAW_DAILY_EXPENSES = [
 ];
 
 export function buildInitialDays(): DayRecord[] {
-  const normLimit = 1859.46;
+  const augustNormLimit = 1859.46;
+  const septNormLimit = 2110.68;
   const today = getTodayDateString();
-  let runningRemainder = 34665.22;
-  let cumulativeAccumulated = 0;
 
-  return RAW_DAILY_EXPENSES.map((raw) => {
-    const isPast = raw.date < today;
-    const isToday = raw.date === today;
-    const isPastOrToday = raw.date <= today;
-    const deviation = normLimit - raw.spent;
-    
-    if (isPastOrToday) {
-      cumulativeAccumulated += deviation;
-      runningRemainder -= raw.spent;
-    }
+  // 1. Historical days from August (2026-08-01 through 2026-09-03)
+  const augustHistory: DayRecord[] = RAW_DAILY_EXPENSES.filter(r => r.date < '2026-09-04').map((raw) => {
+    const isPast = true;
+    const isToday = false;
+    const deviation = augustNormLimit - raw.spent;
 
-    // Recorded expenses for dates with spend
     const expensesList = raw.items.map((item, itemIdx) => ({
       id: `exp-${raw.date}-${itemIdx}`,
       title: item.title,
@@ -337,14 +350,51 @@ export function buildInitialDays(): DayRecord[] {
       dayOfWeekFull: raw.dayOfWeekFull,
       expenses: raw.items.length > 0 ? expensesList : [],
       spent: raw.spent,
-      normLimit: normLimit,
+      normLimit: augustNormLimit,
       deviation: deviation,
-      budgetRemainingOnDate: Math.max(0, cumulativeAccumulated),
-      totalRemaining: isPastOrToday ? runningRemainder : 0,
+      budgetRemainingOnDate: 0,
+      totalRemaining: 0,
       isToday,
       isPast,
     };
   });
+
+  // 2. Days for the current new period (2026-09-04 through 2026-10-04)
+  const septDays: DayRecord[] = [];
+  const daysShort = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  const daysFull = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+
+  const curr = new Date(2026, 8, 4); // September 4, 2026
+  const end = new Date(2026, 9, 4); // October 4, 2026
+
+  while (curr <= end) {
+    const y = curr.getFullYear();
+    const m = String(curr.getMonth() + 1).padStart(2, '0');
+    const d = String(curr.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${d}`;
+    const dayOfWeek = curr.getDay();
+    const isToday = dateStr === today;
+    const isPast = dateStr < today;
+
+    septDays.push({
+      date: dateStr,
+      dayNumber: curr.getDate(),
+      dayOfWeekShort: daysShort[dayOfWeek],
+      dayOfWeekFull: daysFull[dayOfWeek],
+      expenses: [],
+      spent: 0,
+      normLimit: septNormLimit,
+      deviation: septNormLimit,
+      budgetRemainingOnDate: septNormLimit,
+      totalRemaining: 11803.76,
+      isToday,
+      isPast,
+    });
+
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  return [...augustHistory, ...septDays];
 }
 
 export function buildCushionSchedule(
@@ -477,6 +527,54 @@ export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
 
 // Initial Pending Ingested Bank Transactions for today's confirmation queue
 export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
+  {
+    id: 'tx-salary-1',
+    bankAccountId: 'bank-tbank-card',
+    bankName: 'Т-Банк',
+    accountNumberMask: '•4821',
+    title: 'Зачисление зарплаты (ООО «Технологии»)',
+    merchant: 'ООО «Технологии»',
+    amount: 82650.00,
+    type: 'income',
+    categoryType: 'зарплата' as any,
+    categoryName: 'Зарплата',
+    date: getTodayDateString(),
+    time: '10:00',
+    status: 'pending',
+    rawSnippet: 'Т-Банк. Зачисление зарплаты +82 650.00 ₽ от ООО «Технологии». Карта •4821',
+  },
+  {
+    id: 'tx-fuel-1',
+    bankAccountId: 'bank-tbank-card',
+    bankName: 'Т-Банк',
+    accountNumberMask: '•4821',
+    title: 'АЗС Газпромнефть (Бензин АИ-95)',
+    merchant: 'Газпромнефть АЗС',
+    amount: 2500.00,
+    type: 'expense',
+    categoryType: 'авто',
+    categoryName: 'Топливо',
+    date: getTodayDateString(),
+    time: '12:30',
+    status: 'pending',
+    rawSnippet: 'Т-Банк. Оплата 2 500.00 ₽, Газпромнефть АЗС №41. Карта •4821',
+  },
+  {
+    id: 'tx-wb-1',
+    bankAccountId: 'bank-tbank-card',
+    bankName: 'Т-Банк',
+    accountNumberMask: '•4821',
+    title: 'Пополнение WB Кошелька (Wildberries)',
+    merchant: 'Wildberries',
+    amount: 1500.00,
+    type: 'expense',
+    categoryType: 'покупки',
+    categoryName: 'Маркетплейс',
+    date: getTodayDateString(),
+    time: '13:10',
+    status: 'pending',
+    rawSnippet: 'Т-Банк. Перевод 1 500.00 ₽ WB Кошелек Баланс. Карта •4821',
+  },
   {
     id: 'tx-tb-1',
     bankAccountId: 'bank-tbank-card',
@@ -617,13 +715,14 @@ export const INITIAL_BUDGET_STATE: BudgetState = {
   // Advance and salary timeline
   salaryDateDay: 5,
   advanceDateDay: 20,
-  advancePaymentDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-20`,
+  advancePaymentDate: '2026-09-18',
   estimatedAdvanceAmount: 40000.00, // Предполагаемый аванс 20-го числа
-  isAdvanceReceived: new Date().getDate() >= 20,
+  isAdvanceReceived: false,
+  isSalaryReceived: false,
   
-  total30DaysBudget: 135789.69,
+  total30DaysBudget: 11803.76,
   previousMonthRemainder: 11803.76,
-  safetyCushionDeposit: 8265.00,
+  safetyCushionDeposit: 0.00,
   currentSalary: 82650.00,
   
   isBalanceSynced: false,
@@ -639,12 +738,12 @@ export const INITIAL_BUDGET_STATE: BudgetState = {
   cushionMonthlyContribution: 8265.00,
   mandatoryExpenses: INITIAL_MANDATORY_EXPENSES,
   mandatoryExpensesMode: 'manual',
-  isCushionDepositDoneThisMonth: true,
-  actualCushionDepositThisMonth: 8265.00,
+  isCushionDepositDoneThisMonth: false,
+  actualCushionDepositThisMonth: 0.00,
   cushionNormMode: 'percent',
   cushionNormPercent: 10,
   cushionNormFixedAmount: 8265.00,
-  cushionSchedule: buildCushionSchedule(82650.00, true, 8265.00, 8269.53, 8, 2026, 'percent', 10, 8265.00),
+  cushionSchedule: buildCushionSchedule(82650.00, false, 0.00, 8269.53, 9, 2026, 'percent', 10, 8265.00),
   
   // Banking integration data
   bankAccounts: INITIAL_BANK_ACCOUNTS,
@@ -654,5 +753,195 @@ export const INITIAL_BUDGET_STATE: BudgetState = {
   // Incomes & Additional inflows
   incomes: INITIAL_INCOMES,
   
+  // Credit cards
+  creditCards: [],
+  
+  // Regular expenses AI analysis state
+  regularExpensesAnalyzed: false,
+  ignoredMerchants: [],
+  
+  // Food & groceries control
+  foodControl: {
+    mode: 'basket',
+    monthlyLimit: 3000,
+    basketTotal: 14850,
+    basketItems: [
+      {
+        id: 'food-init-1',
+        name: 'Молоко 3.2% (пастеризованное, 900 мл)',
+        price: 89,
+        quantityPerMonth: 8,
+        unit: 'бут',
+        category: 'молочка',
+        frequency: 'weekly',
+        lastUpdated: new Date().toISOString(),
+      },
+      {
+        id: 'food-init-2',
+        name: 'Творог 5% (180-200 г)',
+        price: 105,
+        quantityPerMonth: 6,
+        unit: 'пач',
+        category: 'молочка',
+        frequency: 'weekly',
+        lastUpdated: new Date().toISOString(),
+      },
+      {
+        id: 'food-init-3',
+        name: 'Сыр полутвердый Российский (200 г)',
+        price: 195,
+        quantityPerMonth: 4,
+        unit: 'уп',
+        category: 'молочка',
+        frequency: 'weekly',
+        lastUpdated: new Date().toISOString(),
+      },
+      {
+        id: 'food-init-4',
+        name: 'Яйцо куриное С1 (10 шт)',
+        price: 115,
+        quantityPerMonth: 4,
+        unit: 'дес',
+        category: 'яйца',
+        frequency: 'weekly',
+        lastUpdated: new Date().toISOString(),
+      },
+      {
+        id: 'food-init-5',
+        name: 'Хлеб нарезной пшеничный',
+        price: 46,
+        quantityPerMonth: 8,
+        unit: 'шт',
+        category: 'хлеб',
+        frequency: 'every_2_days',
+        lastUpdated: new Date().toISOString(),
+      },
+      {
+        id: 'food-init-6',
+        name: 'Филе грудки куриное (1 кг)',
+        price: 380,
+        quantityPerMonth: 5,
+        unit: 'кг',
+        category: 'мясо',
+        frequency: 'weekly',
+        lastUpdated: new Date().toISOString(),
+      },
+      {
+        id: 'food-init-7',
+        name: 'Крупа гречневая ядрица (800 г)',
+        price: 79,
+        quantityPerMonth: 2,
+        unit: 'уп',
+        category: 'крупы',
+        frequency: 'biweekly',
+        lastUpdated: new Date().toISOString(),
+      },
+      {
+        id: 'food-init-8',
+        name: 'Макароны твердых сортов (450 г)',
+        price: 75,
+        quantityPerMonth: 4,
+        unit: 'уп',
+        category: 'крупы',
+        frequency: 'weekly',
+        lastUpdated: new Date().toISOString(),
+      },
+      {
+        id: 'food-init-9',
+        name: 'Картофель свежий (1 кг)',
+        price: 48,
+        quantityPerMonth: 8,
+        unit: 'кг',
+        category: 'овощи_фрукты',
+        frequency: 'weekly',
+        lastUpdated: new Date().toISOString(),
+      },
+      {
+        id: 'food-init-10',
+        name: 'Томаты свежие (1 кг)',
+        price: 185,
+        quantityPerMonth: 3,
+        unit: 'кг',
+        category: 'овощи_фрукты',
+        frequency: 'weekly',
+        lastUpdated: new Date().toISOString(),
+      },
+      {
+        id: 'food-init-11',
+        name: 'Бананы (1 кг)',
+        price: 140,
+        quantityPerMonth: 4,
+        unit: 'кг',
+        category: 'овощи_фрукты',
+        frequency: 'weekly',
+        lastUpdated: new Date().toISOString(),
+      },
+      {
+        id: 'food-init-12',
+        name: 'Масло сливочное 82.5% (180 г)',
+        price: 185,
+        quantityPerMonth: 3,
+        unit: 'пач',
+        category: 'масло',
+        frequency: 'biweekly',
+        lastUpdated: new Date().toISOString(),
+      },
+      {
+        id: 'food-init-13',
+        name: 'Чай черный листовой (100 пак)',
+        price: 290,
+        quantityPerMonth: 1,
+        unit: 'уп',
+        category: 'напитки',
+        frequency: 'monthly',
+        lastUpdated: new Date().toISOString(),
+      },
+    ],
+    lastUpdated: new Date().toISOString(),
+  },
+  
+  // Wildberries & OZON Marketplace Sync
+  marketplaceSync: {
+    isWildberriesConnected: true,
+    isOzonConnected: true,
+    lastSyncedAt: new Date().toISOString(),
+    orders: [
+      {
+        id: 'ord-wb-1',
+        marketplace: 'wildberries',
+        title: 'Кроссовки беговые демисезонные',
+        price: 3450.00,
+        status: 'ordered',
+        orderDate: '2026-08-30',
+        deliveryDate: '2026-09-04',
+      },
+      {
+        id: 'ord-wb-2',
+        marketplace: 'wildberries',
+        title: 'Чехол и защитное стекло',
+        price: 689.00,
+        status: 'delivered',
+        orderDate: '2026-08-25',
+      },
+      {
+        id: 'ord-ozon-1',
+        marketplace: 'ozon',
+        title: 'Кофе в зернах 1 кг Brazil Santos',
+        price: 1472.00,
+        status: 'delivered',
+        orderDate: '2026-08-26',
+      },
+      {
+        id: 'ord-ozon-2',
+        marketplace: 'ozon',
+        title: 'Фильтр для воды сменный картридж',
+        price: 890.00,
+        status: 'ordered',
+        orderDate: '2026-09-01',
+        deliveryDate: '2026-09-05',
+      }
+    ]
+  },
+
   isMobileFrame: false,
 };

@@ -8,7 +8,7 @@ import {
   fbSignOut, 
   onAuthStateChanged, 
   doc, 
-  setDoc, 
+  safeSetDoc, 
   serverTimestamp, 
   db,
   User 
@@ -36,24 +36,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .then(async (result) => {
         if (result?.user) {
           const u = result.user;
-          await setDoc(doc(db, 'users', u.uid), {
-            uid: u.uid,
-            email: u.email,
-            displayName: u.displayName,
-            photoURL: u.photoURL,
-            lastLoginAt: serverTimestamp(),
-          }, { merge: true });
+          try {
+            await safeSetDoc(doc(db, 'users', u.uid), {
+              uid: u.uid,
+              email: u.email,
+              displayName: u.displayName,
+              photoURL: u.photoURL,
+              lastLoginAt: serverTimestamp(),
+            }, { merge: true });
+          } catch (e) {
+            console.warn('Could not sync redirect user profile to firestore:', e);
+          }
         }
       })
       .catch((err) => {
-        console.error('Redirect sign-in error:', err);
+        console.warn('Redirect sign-in error:', err);
       });
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
         try {
-          await setDoc(doc(db, 'users', currentUser.uid), {
+          await safeSetDoc(doc(db, 'users', currentUser.uid), {
             uid: currentUser.uid,
             email: currentUser.email,
             displayName: currentUser.displayName,
@@ -75,13 +79,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const result = await signInWithPopup(auth, googleProvider);
       if (result.user) {
-        await setDoc(doc(db, 'users', result.user.uid), {
-          uid: result.user.uid,
-          email: result.user.email,
-          displayName: result.user.displayName,
-          photoURL: result.user.photoURL,
-          lastLoginAt: serverTimestamp(),
-        }, { merge: true });
+        try {
+          await safeSetDoc(doc(db, 'users', result.user.uid), {
+            uid: result.user.uid,
+            email: result.user.email,
+            displayName: result.user.displayName,
+            photoURL: result.user.photoURL,
+            lastLoginAt: serverTimestamp(),
+          }, { merge: true });
+        } catch (e) {
+          console.warn('Could not sync signed-in user profile to firestore:', e);
+        }
       }
     } catch (err: any) {
       console.warn('Popup login failed, attempting redirect fallback:', err);

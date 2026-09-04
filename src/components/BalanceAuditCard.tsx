@@ -7,7 +7,10 @@ import {
   RefreshCw,
   HelpCircle,
   X,
-  CreditCard
+  CreditCard,
+  Pencil,
+  Check,
+  Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -22,11 +25,16 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
     applyBudgetCorrection,
     syncBankAccounts,
     isBankSyncing,
+    updateBankAccountBalance,
+    addBankAccount,
     state
   } = useBudget();
 
   const [showTooltip, setShowTooltip] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [cardBalances, setCardBalances] = useState<Record<string, string>>({});
+  const [standaloneAmount, setStandaloneAmount] = useState('');
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   // Determine if there is a real discrepancy with bank cards
@@ -38,6 +46,55 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
     i => i.title.toLowerCase() === 'корректировка' || i.title.toLowerCase().includes('корректировка бюджета')
   );
   const currentSavedCorrection = existingCorrectionItem ? existingCorrectionItem.amount : 0;
+
+  const checkingAccounts = (state.bankAccounts || []).filter(a => a.accountType === 'checking' && a.isConnected !== false);
+
+  // Open manual edit modal and prefill current values
+  const handleOpenManualModal = () => {
+    const initialMap: Record<string, string> = {};
+    if (checkingAccounts.length > 0) {
+      checkingAccounts.forEach(acc => {
+        initialMap[acc.id] = String(acc.balance);
+      });
+    } else {
+      setStandaloneAmount(String(totalCheckingBankBalance || 0));
+    }
+    setCardBalances(initialMap);
+    setIsManualModalOpen(true);
+  };
+
+  const handleSaveManualBalances = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (checkingAccounts.length > 0) {
+      checkingAccounts.forEach(acc => {
+        const valStr = cardBalances[acc.id];
+        if (valStr !== undefined) {
+          const num = parseFloat(valStr);
+          if (!isNaN(num)) {
+            updateBankAccountBalance(acc.id, num);
+          }
+        }
+      });
+    } else {
+      const num = parseFloat(standaloneAmount);
+      if (!isNaN(num)) {
+        addBankAccount({
+          bankId: 'tbank',
+          bankName: 'Т-Банк',
+          accountType: 'checking',
+          accountName: 'Основная карта',
+          accountNumberMask: '•0001',
+          balance: num,
+          color: '#fed838',
+          lastSyncedAt: new Date().toISOString(),
+          isConnected: true
+        });
+      }
+    }
+    setIsManualModalOpen(false);
+    setSuccessToast('Баланс карты успешно сохранён');
+    setTimeout(() => setSuccessToast(null), 3500);
+  };
 
   // Handle single-click synchronization
   const handleSync = () => {
@@ -69,8 +126,8 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
 
   return (
     <div className="bg-[var(--color-bg-card)] rounded-2xl p-4 shadow-xs border border-[var(--color-border)] flex flex-col gap-3 relative">
-      {/* 1. Header: Title + Info Tooltip Icon + Bank Sync */}
-      <div className="flex justify-between items-center">
+      {/* 1. Header: Title + Info Tooltip Icon + Bank Sync & Manual Input */}
+      <div className="flex justify-between items-center gap-2">
         <div className="flex items-center gap-1.5 relative">
           <span className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider">
             КОРРЕКТИРОВКА
@@ -80,7 +137,7 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
           <button
             type="button"
             onClick={() => setShowTooltip(!showTooltip)}
-            className="p-1 rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-card-subtle)] transition-colors"
+            className="p-1 rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-card-subtle)] transition-colors cursor-pointer"
             title="Что такое корректировка?"
             aria-label="Справка по корректировке"
           >
@@ -88,11 +145,20 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          <button
+            onClick={handleOpenManualModal}
+            className="px-2 py-1 rounded-lg bg-[var(--color-bg-card-subtle)] hover:bg-[var(--color-bg-card-muted)] text-[var(--color-text-main)] border border-[var(--color-border)] text-[11px] font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+            title="Ручной ввод баланса карты"
+          >
+            <Pencil className="w-3 h-3 text-[var(--color-accent)]" />
+            <span>Ручной ввод</span>
+          </button>
+
           <button
             onClick={() => syncBankAccounts()}
             disabled={isBankSyncing}
-            className="flex items-center gap-1 text-[11px] font-semibold text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] transition-colors active:scale-95"
+            className="flex items-center gap-1 text-[11px] font-semibold text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] transition-colors active:scale-95 cursor-pointer px-1.5 py-1 rounded-lg"
             title="Обновить баланс карт"
           >
             <RefreshCw className={`w-3 h-3 ${isBankSyncing ? 'animate-spin text-blue-500' : ''}`} />
@@ -118,7 +184,7 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
               </span>
               <button
                 onClick={() => setShowTooltip(false)}
-                className="p-1 -mr-1 -mt-1 text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] rounded-lg"
+                className="p-1 -mr-1 -mt-1 text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] rounded-lg cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -128,7 +194,7 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
               Корректировка вносится в случае, если пользователь не учёл или не заметил какой-либо расход, а также в случае, если пришёл аванс, отличающийся от планируемого.
             </p>
             <p className="text-[11.5px] leading-relaxed text-[var(--color-text-secondary)]">
-              При расхождении приходит уведомление, с помощью которого можно сделать синхронизацию одной кнопкой.
+              Вы также можете вручную ввести или скорректировать баланс карты с помощью кнопки «Ручной ввод», если банковская выгрузка отличается от фактической суммы на карте.
             </p>
           </motion.div>
         )}
@@ -175,19 +241,30 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
                   Выявлено расхождение с балансом карты
                 </span>
                 <span className="text-[11px] text-[var(--color-text-muted)] block truncate">
-                  Разница: {formatRubles(absCorrection)}
+                  Разница: {formatRubles(absCorrection)} (на карте: {formatRubles(totalCheckingBankBalance, { showCents: false })})
                 </span>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleSync}
-              className="py-2 px-3.5 rounded-xl bg-[#006d37] dark:bg-[#10b981] hover:bg-[#005228] dark:hover:bg-[#059669] text-white dark:text-[#041627] font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Синхронизировать</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleOpenManualModal}
+                className="py-1.5 px-3 rounded-xl bg-[var(--color-bg-card)] hover:bg-[var(--color-bg-card-muted)] text-[var(--color-text-main)] border border-[var(--color-border)] font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <Pencil className="w-3 h-3 text-[var(--color-accent)]" />
+                <span>Ввести баланс</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSync}
+                className="py-1.5 px-3 rounded-xl bg-[#006d37] dark:bg-[#10b981] hover:bg-[#005228] dark:hover:bg-[#059669] text-white dark:text-[#041627] font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Синхронизировать</span>
+              </button>
+            </div>
           </motion.div>
         ) : (
           <motion.div
@@ -207,7 +284,7 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
                   Расхождений не выявлено
                 </span>
                 <span className="text-[11px] text-[var(--color-text-muted)] block truncate">
-                  Чистый остаток соответствует балансу по карте
+                  Чистый остаток соответствует балансу по карте ({formatRubles(totalCheckingBankBalance, { showCents: false })})
                 </span>
               </div>
             </div>
@@ -219,7 +296,7 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
         )}
       </AnimatePresence>
 
-      {/* 5. Success Toast (brief confirmation after clicking Sync) */}
+      {/* 5. Success Toast (brief confirmation after clicking Sync or Manual Input) */}
       <AnimatePresence>
         {successToast && (
           <motion.div
@@ -231,6 +308,109 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             <span>{successToast}</span>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 6. Manual Card Balance Dialog Modal */}
+      <AnimatePresence>
+        {isManualModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-2xl shadow-xl overflow-hidden"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-[var(--color-accent)]/10 text-[var(--color-accent)] flex items-center justify-center">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-bold text-sm sm:text-base text-[var(--color-text-main)]">
+                    Ручной ввод баланса карты
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setIsManualModalOpen(false)}
+                  className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] rounded-lg cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveManualBalances} className="p-4 space-y-4">
+                <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+                  Укажите точную сумму, которая сейчас находится на ваших дебетовых картах. Это исправит расчёт автоматической корректировки.
+                </p>
+
+                {checkingAccounts.length > 0 ? (
+                  <div className="space-y-3">
+                    {checkingAccounts.map(acc => (
+                      <div key={acc.id} className="p-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border)] space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-bold text-[var(--color-text-main)]">
+                            {acc.bankName} {acc.accountName}
+                          </span>
+                          <span className="text-[var(--color-text-muted)] font-mono">
+                            {acc.accountNumberMask}
+                          </span>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="any"
+                            value={cardBalances[acc.id] ?? ''}
+                            onChange={(e) => setCardBalances(prev => ({ ...prev, [acc.id]: e.target.value }))}
+                            placeholder="0"
+                            className="w-full px-3 py-2 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl text-sm font-bold text-[var(--color-text-main)] focus:outline-none focus:border-[var(--color-accent)] pr-8"
+                          />
+                          <span className="absolute right-3 top-2.5 text-xs text-[var(--color-text-muted)] font-bold">
+                            ₽
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border)] space-y-1.5">
+                    <span className="text-xs font-bold text-[var(--color-text-main)] block">
+                      Фактический баланс карты:
+                    </span>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="any"
+                        value={standaloneAmount}
+                        onChange={(e) => setStandaloneAmount(e.target.value)}
+                        placeholder="0"
+                        className="w-full px-3 py-2 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl text-sm font-bold text-[var(--color-text-main)] focus:outline-none focus:border-[var(--color-accent)] pr-8"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs text-[var(--color-text-muted)] font-bold">
+                        ₽
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--color-border)]">
+                  <button
+                    type="button"
+                    onClick={() => setIsManualModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-[var(--color-text-muted)] hover:bg-[var(--color-bg-card-subtle)] transition-all cursor-pointer"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl text-xs font-bold bg-[#006d37] dark:bg-[#10b981] hover:bg-[#005228] dark:hover:bg-[#059669] text-white dark:text-[#041627] flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span>Сохранить баланс</span>
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { BudgetProvider, useBudget } from './context/BudgetContext';
+import { ProfileProvider, useProfile } from './context/ProfileContext';
+import { OnboardingFlow } from './components/Onboarding/OnboardingFlow';
 import { TopBar, BottomNavBar } from './components/Navigation';
 import { TodayScreen } from './components/TodayScreen';
 import { BudgetScreen } from './components/BudgetScreen';
@@ -16,17 +18,24 @@ import { DeviceFrame } from './components/DeviceFrame';
 
 function AppContent() {
   const { activeTab } = useBudget();
+  const { isOnboardingComplete } = useProfile();
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [isAddWishlistOpen, setIsAddWishlistOpen] = useState(false);
   const [isAddPlannedOpen, setIsAddPlannedOpen] = useState(false);
 
+  // Если онбординг не пройден – показываем его
+  if (!isOnboardingComplete) {
+    return <OnboardingFlow />;
+  }
+
+  // Иначе показываем основное приложение
   return (
     <DeviceFrame>
       <TopBar 
         onOpenAddExpense={() => setIsAddExpenseOpen(true)}
       />
 
-      <main className="w-full">
+      <main className="w-full pb-28 sm:pb-32">
         {activeTab === 'today' && (
           <TodayScreen 
             onOpenAddExpense={() => setIsAddExpenseOpen(true)} 
@@ -64,7 +73,6 @@ function AppContent() {
 
       <BottomNavBar />
 
-      {/* Modals */}
       <AddExpenseModal
         isOpen={isAddExpenseOpen}
         onClose={() => setIsAddExpenseOpen(false)}
@@ -84,9 +92,11 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <BudgetProvider>
-        <AppContent />
-      </BudgetProvider>
+      <ProfileProvider>           {/* теперь ProfileProvider выше */}
+        <BudgetProvider>
+          <AppContent />
+        </BudgetProvider>
+      </ProfileProvider>
     </AuthProvider>
   );
 }

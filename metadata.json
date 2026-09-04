@@ -1,7 +1,9 @@
 {
   "name": "Лимит Дня — Финансовый Бюджет",
   "description": "Приложение для контроля дневного лимита, бюджета на 30 дней, аналитики расходов, вишлиста и трекера подушки безопасности.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "camera"
+  ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

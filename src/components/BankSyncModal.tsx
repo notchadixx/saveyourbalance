@@ -18,7 +18,8 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   Percent,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Pencil
 } from 'lucide-react';
 import { BankAccount, BankId, ExpenseCategory } from '../types';
 import { BalanceAuditCard } from './BalanceAuditCard';
@@ -69,6 +70,23 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
   const [newCardMask, setNewCardMask] = useState('•1234');
   const [newBalance, setNewBalance] = useState('');
   const [newInterestRate, setNewInterestRate] = useState('13.5');
+
+  // Inline balance editing
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [editingBalanceValue, setEditingBalanceValue] = useState<string>('');
+
+  const handleStartEditBalance = (acc: BankAccount) => {
+    setEditingAccountId(acc.id);
+    setEditingBalanceValue(String(acc.balance));
+  };
+
+  const handleSaveEditBalance = (id: string) => {
+    const val = parseFloat(editingBalanceValue);
+    if (!isNaN(val)) {
+      updateBankAccountBalance(id, val);
+    }
+    setEditingAccountId(null);
+  };
 
   // Cushion reconcile message
   const [cushionReconcileMsg, setCushionReconcileMsg] = useState<string | null>(null);
@@ -260,22 +278,59 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <div className="text-right">
-                        <span className="text-sm font-extrabold text-[var(--color-text-main)]">
-                          {formatRubles(acc.balance)}
-                        </span>
-                        <span className="block text-[10px] text-emerald-500 font-medium">
-                          Синхронизировано ✓
-                        </span>
-                      </div>
+                      {editingAccountId === acc.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            step="any"
+                            value={editingBalanceValue}
+                            onChange={(e) => setEditingBalanceValue(e.target.value)}
+                            className="w-24 px-2 py-1 bg-[var(--color-bg-card)] border border-[var(--color-accent)] rounded-lg text-xs font-bold text-[var(--color-text-main)] focus:outline-none"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleSaveEditBalance(acc.id)}
+                            className="p-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
+                            title="Сохранить"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setEditingAccountId(null)}
+                            className="p-1 rounded-lg bg-[var(--color-bg-card-muted)] text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]"
+                            title="Отмена"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-right">
+                            <span className="text-sm font-extrabold text-[var(--color-text-main)]">
+                              {formatRubles(acc.balance)}
+                            </span>
+                            <span className="block text-[10px] text-emerald-500 font-medium">
+                              Синхронизировано ✓
+                            </span>
+                          </div>
 
-                      <button
-                        onClick={() => removeBankAccount(acc.id)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-[var(--color-text-muted)] hover:text-[var(--color-danger)] transition-all"
-                        title="Удалить счет"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                          <button
+                            onClick={() => handleStartEditBalance(acc)}
+                            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-all cursor-pointer"
+                            title="Изменить баланс вручную"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            onClick={() => removeBankAccount(acc.id)}
+                            className="opacity-0 group-hover:opacity-100 p-1 text-[var(--color-text-muted)] hover:text-[var(--color-danger)] transition-all cursor-pointer"
+                            title="Удалить счет"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );

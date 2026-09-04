@@ -19,12 +19,14 @@ import {
   ArrowRight,
   ChevronDown, 
   ChevronUp,
-  BookmarkCheck
+  BookmarkCheck,
+  ShoppingBag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ExpenseItem, BankTransaction, PlannedItem } from '../types';
 import { BalanceAuditCard } from './BalanceAuditCard';
 import { BankSyncModal } from './BankSyncModal';
+import { MarketplaceSyncModal } from './MarketplaceSyncModal';
 
 interface ConfirmExpensesScreenProps {
   onOpenAddExpense: () => void;
@@ -55,7 +57,10 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
   const [justConfirmedAll, setJustConfirmedAll] = useState(false);
   const [showFormulaBreakdown, setShowFormulaBreakdown] = useState(false);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
-  const [matchingDecisionTxId, setMatchingDecisionTxId] = useState<string | null>(null);
+  const [isMarketplaceModalOpen, setIsMarketplaceModalOpen] = useState(false);
+  const [selectedPlanForTx, setSelectedPlanForTx] = useState<{ [txId: string]: string }>({});
+  const [manualPlanTxId, setManualPlanTxId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const todayRecord = state.days.find(d => d.date === state.todayDate);
   const rawExpenses: ExpenseItem[] = todayRecord?.expenses || [];
@@ -93,6 +98,18 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
     }, 2500);
   };
 
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(prev => prev === msg ? null : prev);
+    }, 4000);
+  };
+
+  const handleConfirmToPlan = (txId: string, planId: string) => {
+    const res = confirmPlannedBankTransaction(txId, planId);
+    showToast(res.message || 'Операция успешно учтена в планах');
+  };
+
   const getCategoryEmoji = (categoryType: string) => {
     switch (categoryType) {
       case 'продукты': return '🛒';
@@ -109,20 +126,48 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
 
   // Helper to find matching planned item for a bank transaction
   const findMatchingPlannedItem = (tx: BankTransaction): PlannedItem | undefined => {
-    const txTitle = tx.title.toLowerCase();
+    const txTitle = (tx.title || '').toLowerCase();
+    const txMerchant = (tx.merchant || '').toLowerCase();
+    const txCategory = (tx.categoryType || '').toLowerCase();
+
     return state.plannedItems.find(p => {
-      if (p.isPaid) return false;
+      // Исключаем архивные статьи прошлого периода
+      if (p.period === 'previous') return false;
+      if (p.isPaid && !p.isProgressTracked) return false;
+
       const pTitle = p.title.toLowerCase();
-      const isFuel = pTitle.includes('бенз') && (txTitle.includes('азс') || txTitle.includes('лукойл') || txTitle.includes('газпром') || txTitle.includes('тебойл') || txTitle.includes('топлив'));
+      const pCategory = (p.category || '').toLowerCase();
+
+      // 1. Авто / Топливо / Бензин
+      const isFuelTx = txTitle.includes('азс') || txTitle.includes('лукойл') || txTitle.includes('газпром') || txTitle.includes('тебойл') || txTitle.includes('топлив') || txTitle.includes('бенз') || txCategory === 'авто';
+      const isFuelPlan = pTitle.includes('бенз') || pTitle.includes('топлив') || pTitle.includes('азс') || pCategory === 'авто';
+      if (isFuelTx && isFuelPlan) return true;
+
+      // 2. Маркетплейсы: Wildberries / OZON
+      const isWbTx = txTitle.includes('wildberries') || txTitle.includes('wb') || txMerchant.includes('wildberries') || txTitle.includes('вайлдберриз');
+      const isWbPlan = pTitle.includes('wildberries') || pTitle.includes('wb') || pTitle.includes('вайлдберриз');
+      if (isWbTx && isWbPlan) return true;
+
+      const isOzonTx = txTitle.includes('ozon') || txTitle.includes('озон') || txMerchant.includes('ozon');
+      const isOzonPlan = pTitle.includes('ozon') || pTitle.includes('озон');
+      if (isOzonTx && isOzonPlan) return true;
+
+      // 3. Совпадение по категории (если категория совпадает с той, что внесена в план)
+      if (pCategory && txCategory && pCategory === txCategory) {
+        return true;
+      }
+
+      // 4. Прямое совпадение по названию
       const isExactOrCloseTitle = txTitle.includes(pTitle) || pTitle.includes(txTitle);
-      const isExactAmount = Math.abs(p.amount - tx.amount) < 1;
-      return isFuel || isExactOrCloseTitle || (isExactAmount && p.category === tx.categoryType);
+      if (isExactOrCloseTitle && pTitle.length > 2) return true;
+
+      return false;
     });
   };
 
   return (
     <div className="flex flex-col gap-4 pb-28 pt-2">
-      {/* 1. Header with back button and Bank Sync CTA */}
+      {/* 1. Header with back button and Bank & Marketplace Sync CTA */}
       <div className="flex items-center justify-between px-1">
         <button
           onClick={() => setActiveTab('today')}
@@ -134,6 +179,14 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setIsMarketplaceModalOpen(true)}
+            className="flex items-center gap-1.5 text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2.5 py-1.5 rounded-xl transition-all hover:bg-purple-500/20 active:scale-95 cursor-pointer"
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>WB / OZON</span>
+          </button>
+
+          <button
             onClick={() => setIsBankModalOpen(true)}
             className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1.5 rounded-xl transition-all hover:bg-blue-500/20 active:scale-95 cursor-pointer"
           >
@@ -143,34 +196,51 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
         </div>
       </div>
 
-      {/* 2. Top Summary Card */}
+      {/* 2. Top Summary Card with fixed "К проверке" badge */}
       <motion.div
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-[var(--color-bg-card)] rounded-2xl p-5 shadow-xs border border-[var(--color-border)] flex flex-col gap-3 relative overflow-hidden"
+        className="bg-[var(--color-bg-card)] rounded-2xl p-4 sm:p-5 shadow-xs border border-[var(--color-border)] flex flex-col gap-3 relative overflow-hidden"
       >
-        <div className="flex justify-between items-start">
-          <div>
+        {/* Toast notification if operation confirmed */}
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-2.5 sm:p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 text-xs font-semibold flex items-center gap-2 shadow-2xs"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="flex-1 leading-snug">{toastMessage}</span>
+            <button
+              onClick={() => setToastMessage(null)}
+              className="text-emerald-700 dark:text-emerald-300 hover:opacity-75 p-1 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+
+        <div className="flex justify-between items-start gap-2.5">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-8 h-8 rounded-xl bg-[var(--color-accent-badge-bg)] text-[var(--color-accent)] flex items-center justify-center font-bold">
+              <div className="w-8 h-8 rounded-xl bg-[var(--color-accent-badge-bg)] text-[var(--color-accent)] flex items-center justify-center font-bold shrink-0">
                 <Receipt className="w-4 h-4" />
               </div>
-              <h2 className="text-lg font-extrabold text-[var(--color-text-main)]">Подтверждение трат</h2>
+              <h2 className="text-base sm:text-lg font-extrabold text-[var(--color-text-main)] truncate">Подтверждение трат</h2>
             </div>
-            <p className="text-xs text-[var(--color-text-muted)]">
+            <p className="text-xs text-[var(--color-text-muted)] line-clamp-2">
               Сверьте фактические расходы за {formattedTodayDate} и подтвердите чеки из банков
             </p>
           </div>
 
-          <div className="text-right">
-            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
+          <div className="shrink-0 flex items-center justify-end self-start">
+            <span className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap leading-none tracking-tight shadow-2xs ${
               allConfirmed && pendingBankTxs.length === 0
                 ? 'bg-[var(--color-accent-badge-bg)] text-[var(--color-accent-badge-text)] border border-[var(--color-accent-badge-border)]' 
-                : 'bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+                : 'bg-[var(--color-danger-bg)] text-[var(--color-danger)] border border-[var(--color-danger)]/20'
             }`}>
-              {allConfirmed && pendingBankTxs.length === 0
-                ? 'Все подтверждено ✓' 
-                : `К проверке: ${unconfirmedCountToday + pendingBankTxs.length}`}
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${allConfirmed && pendingBankTxs.length === 0 ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`} />
+              <span>{allConfirmed && pendingBankTxs.length === 0 ? 'Все подтверждено ✓' : `К проверке: ${unconfirmedCountToday + pendingBankTxs.length}`}</span>
             </span>
           </div>
         </div>
@@ -316,44 +386,130 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
 
                   {/* Planned match notification if detected */}
                   {matchingPlanned ? (
-                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col gap-2">
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col gap-2.5">
                       <div className="flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                        <div>
+                        <div className="min-w-0">
                           <span className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
-                            Обнаружено совпадение операций. Это запланированный расход?
+                            Обнаружено совпадение с планом! Учесть в плановую статью?
                           </span>
-                          <span className="text-[11px] text-amber-800/80 dark:text-amber-300/80 block mt-0.5">
-                            В разделе «Планы» есть статья: <strong>{matchingPlanned.title}</strong> ({formatRubles(matchingPlanned.amount)}).
+                          <span className="text-[11px] text-amber-800/90 dark:text-amber-300/90 block mt-0.5">
+                            Категория операции совпала со статьёй: <strong>«{matchingPlanned.title}»</strong> (План: {formatRubles(matchingPlanned.amount)}
+                            {matchingPlanned.spentAmount ? `, факт: ${formatRubles(matchingPlanned.spentAmount)}` : ''}).
+                            Сумма будет учтена в шкале плана, а дневной лимит трат не уменьшится.
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 pt-1 flex-wrap sm:flex-nowrap">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
                         <button
-                          onClick={() => confirmPlannedBankTransaction(tx.id, matchingPlanned.id)}
+                          type="button"
+                          onClick={() => handleConfirmToPlan(tx.id, matchingPlanned.id)}
                           className="flex-1 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                         >
                           <BookmarkCheck className="w-3.5 h-3.5" />
-                          <span>Да, это из Планов ({matchingPlanned.title})</span>
+                          <span>Да, учесть в план «{matchingPlanned.title}»</span>
                         </button>
                         <button
-                          onClick={() => approveBankTransaction(tx.id)}
-                          className="py-2 px-3 rounded-xl bg-[var(--color-bg-card)] hover:bg-[var(--color-bg-card-subtle)] border border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-main)] active:scale-95 transition-all cursor-pointer"
+                          type="button"
+                          onClick={() => {
+                            approveBankTransaction(tx.id);
+                            showToast(`Расход ${formatRubles(tx.amount)} списан из бюджета на сегодня`);
+                          }}
+                          className="py-2 px-3 rounded-xl bg-[var(--color-bg-card)] hover:bg-[var(--color-bg-card-subtle)] border border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-main)] active:scale-95 transition-all cursor-pointer text-center"
                         >
-                          Нет, расход за сегодня
+                          Нет, списать из «Сегодня»
                         </button>
                       </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-amber-500/20 text-[10px] text-amber-800/70 dark:text-amber-400/70">
+                        <span>Правило: совпадение по сумме — закрывает план, иначе обновляет шкалу</span>
+                        <button
+                          type="button"
+                          onClick={() => setManualPlanTxId(manualPlanTxId === tx.id ? null : tx.id)}
+                          className="font-bold underline hover:text-amber-900 dark:hover:text-amber-200 cursor-pointer"
+                        >
+                          {manualPlanTxId === tx.id ? 'Скрыть выбор плана' : 'Выбрать другой план...'}
+                        </button>
+                      </div>
+
+                      {manualPlanTxId === tx.id && (
+                        <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                          <select
+                            value={selectedPlanForTx[tx.id] || matchingPlanned.id}
+                            onChange={(e) => setSelectedPlanForTx({ ...selectedPlanForTx, [tx.id]: e.target.value })}
+                            className="h-8 px-2 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg text-xs font-semibold text-[var(--color-text-main)] flex-1"
+                          >
+                            {state.plannedItems.filter(p => p.period !== 'previous').map(p => (
+                              <option key={p.id} value={p.id}>
+                                {p.title} (План: {formatRubles(p.amount)}{p.spentAmount ? `, факт: ${formatRubles(p.spentAmount)}` : ''})
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const targetId = selectedPlanForTx[tx.id] || matchingPlanned.id;
+                              handleConfirmToPlan(tx.id, targetId);
+                            }}
+                            className="h-8 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            Учесть в выбранный план
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-[var(--color-border-subtle)]">
-                      <button
-                        onClick={() => approveBankTransaction(tx.id)}
-                        className="py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Подтвердить расход за сегодня</span>
-                      </button>
+                    <div className="flex flex-col gap-2 pt-1 border-t border-[var(--color-border-subtle)]">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setManualPlanTxId(manualPlanTxId === tx.id ? null : tx.id)}
+                          className="text-[11px] font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] flex items-center gap-1 cursor-pointer"
+                        >
+                          <BookmarkCheck className="w-3.5 h-3.5" />
+                          <span>{manualPlanTxId === tx.id ? 'Отменить выбор плана' : 'Учесть в плановую статью...'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            approveBankTransaction(tx.id);
+                            showToast(`Расход ${formatRubles(tx.amount)} списан из бюджета на сегодня`);
+                          }}
+                          className="py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer ml-auto"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Подтвердить расход за сегодня</span>
+                        </button>
+                      </div>
+
+                      {manualPlanTxId === tx.id && (
+                        <div className="p-2.5 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] flex flex-col sm:flex-row gap-2">
+                          <select
+                            value={selectedPlanForTx[tx.id] || state.plannedItems.filter(p => p.period !== 'previous')[0]?.id || ''}
+                            onChange={(e) => setSelectedPlanForTx({ ...selectedPlanForTx, [tx.id]: e.target.value })}
+                            className="h-8 px-2 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg text-xs font-semibold text-[var(--color-text-main)] flex-1"
+                          >
+                            {state.plannedItems.filter(p => p.period !== 'previous').map(p => (
+                              <option key={p.id} value={p.id}>
+                                {p.title} (План: {formatRubles(p.amount)}{p.spentAmount ? `, факт: ${formatRubles(p.spentAmount)}` : ''})
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const activePlans = state.plannedItems.filter(p => p.period !== 'previous');
+                              const targetId = selectedPlanForTx[tx.id] || activePlans[0]?.id;
+                              if (targetId) handleConfirmToPlan(tx.id, targetId);
+                            }}
+                            className="h-8 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            Перенести в план
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </motion.div>
@@ -519,6 +675,12 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
       <BankSyncModal
         isOpen={isBankModalOpen}
         onClose={() => setIsBankModalOpen(false)}
+      />
+
+      {/* Marketplace Modal */}
+      <MarketplaceSyncModal
+        isOpen={isMarketplaceModalOpen}
+        onClose={() => setIsMarketplaceModalOpen(false)}
       />
     </div>
   );
