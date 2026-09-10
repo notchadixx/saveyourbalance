@@ -298,7 +298,7 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
               className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
             >
               <RefreshCw className={`w-3 h-3 ${isBankSyncing ? 'animate-spin' : ''}`} />
-              <span>Синхронизировать</span>
+              <span>Обновить время</span>
             </button>
           </div>
         </div>
@@ -313,7 +313,7 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
               onClick={() => syncBankAccounts()}
               className="text-[11px] font-bold text-[var(--color-accent)] hover:underline shrink-0 cursor-pointer"
             >
-              Проверить
+              Обновить
             </button>
           </div>
         ) : (
@@ -321,7 +321,7 @@ export const ConfirmExpensesScreen: React.FC<ConfirmExpensesScreenProps> = ({ on
             {/* 1-click Approve All Bank transactions */}
             <div className="flex justify-between items-center px-1">
               <span className="text-[11px] text-[var(--color-text-muted)]">
-                Поступили автоматически через банковскую синхронизацию:
+                Ожидают подтверждения из добавленных чеков и уведомлений:
               </span>
               <button
                 onClick={() => approveAllPendingBankTransactions()}

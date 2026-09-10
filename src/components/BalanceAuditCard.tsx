@@ -69,14 +69,14 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
       checkingAccounts.forEach(acc => {
         const valStr = cardBalances[acc.id];
         if (valStr !== undefined) {
-          const num = parseFloat(valStr);
+          const num = parseFloat(valStr.replace(/\s+/g, '').replace(',', '.'));
           if (!isNaN(num)) {
             updateBankAccountBalance(acc.id, num);
           }
         }
       });
     } else {
-      const num = parseFloat(standaloneAmount);
+      const num = parseFloat(standaloneAmount.replace(/\s+/g, '').replace(',', '.'));
       if (!isNaN(num)) {
         addBankAccount({
           bankId: 'tbank',
@@ -99,7 +99,7 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
   // Handle single-click synchronization
   const handleSync = () => {
     const res = applyBudgetCorrection('planned');
-    setSuccessToast(res.message || 'Счета успешно синхронизированы!');
+    setSuccessToast(res.message || 'Счета успешно сверены!');
     setTimeout(() => setSuccessToast(null), 3500);
   };
 
@@ -125,7 +125,7 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
   }, [showTooltip]);
 
   return (
-    <div className="bg-[var(--color-bg-card)] rounded-2xl p-4 shadow-xs border border-[var(--color-border)] flex flex-col gap-3 relative">
+    <div id="tour-balance-audit" className="bg-[var(--color-bg-card)] rounded-2xl p-4 shadow-xs border border-[var(--color-border)] flex flex-col gap-3 relative">
       {/* 1. Header: Title + Info Tooltip Icon + Bank Sync & Manual Input */}
       <div className="flex justify-between items-center gap-2">
         <div className="flex items-center gap-1.5 relative">
@@ -147,6 +147,7 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
 
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           <button
+            id="tour-audit-manual-btn"
             onClick={handleOpenManualModal}
             className="px-2 py-1 rounded-lg bg-[var(--color-bg-card-subtle)] hover:bg-[var(--color-bg-card-muted)] text-[var(--color-text-main)] border border-[var(--color-border)] text-[11px] font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
             title="Ручной ввод баланса карты"
@@ -209,7 +210,7 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
               : (currentSavedCorrection > 0 ? formatRubles(currentSavedCorrection, { showCents: false }) : '0 ₽')}
           </div>
           <span className="text-[11px] text-[var(--color-text-muted)] font-medium">
-            {hasDiscrepancy ? 'Требуется синхронизация с балансом карты' : 'Расхождений с картами нет'}
+            {hasDiscrepancy ? 'Требуется корректировка расхождения' : 'Расхождений с картами нет'}
           </span>
         </div>
 
@@ -262,7 +263,7 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
                 className="py-1.5 px-3 rounded-xl bg-[#006d37] dark:bg-[#10b981] hover:bg-[#005228] dark:hover:bg-[#059669] text-white dark:text-[#041627] font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Синхронизировать</span>
+                <span>Скорректировать</span>
               </button>
             </div>
           </motion.div>
@@ -357,8 +358,8 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
                         </div>
                         <div className="relative">
                           <input
-                            type="number"
-                            step="any"
+                            type="text"
+                            inputMode="decimal"
                             value={cardBalances[acc.id] ?? ''}
                             onChange={(e) => setCardBalances(prev => ({ ...prev, [acc.id]: e.target.value }))}
                             placeholder="0"
@@ -378,8 +379,8 @@ export const BalanceAuditCard: React.FC<BalanceAuditCardProps> = ({ onOpenBankMo
                     </span>
                     <div className="relative">
                       <input
-                        type="number"
-                        step="any"
+                        type="text"
+                        inputMode="decimal"
                         value={standaloneAmount}
                         onChange={(e) => setStandaloneAmount(e.target.value)}
                         placeholder="0"

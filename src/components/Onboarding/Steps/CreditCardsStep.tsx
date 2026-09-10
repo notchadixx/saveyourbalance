@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useBudget, formatRubles } from '../../../context/BudgetContext';
 import { CreditCard, CreditCardStrategy } from '../../../types';
 import { formatDate } from '../../../utils/dateUtils';
@@ -6,6 +6,7 @@ import {
   CreditCard as CreditCardIcon, 
   Sparkles, 
   Check, 
+  CheckCircle2,
   Trash2, 
   Edit3, 
   Sliders, 
@@ -75,17 +76,21 @@ export const CreditCardsStep: React.FC<Props> = () => {
   // Card confirmed / applied flag
   const [isSaved, setIsSaved] = useState<boolean>(existingCards.length > 0);
 
+  useEffect(() => {
+    setIsSaved(false);
+  }, [strategy, creditLimit, currentDebt, gracePeriodEndDate, customPaymentAmount, isCustomPayment]);
+
   const effectiveMonthlyPayment = useMemo(() => {
     if (strategy !== 'debt') return undefined;
     if (isCustomPayment && customPaymentAmount) {
-      const parsed = parseFloat(customPaymentAmount);
+      const parsed = parseFloat(customPaymentAmount.replace(/\s+/g, '').replace(',', '.'));
       return !isNaN(parsed) && parsed > 0 ? parsed : recommendedDebtPayment;
     }
     return recommendedDebtPayment;
   }, [strategy, isCustomPayment, customPaymentAmount, recommendedDebtPayment]);
 
   const handleApplyCard = () => {
-    const cleanMask = detectedMask.slice(-4) || '5521';
+    const cleanMask = (detectedMask || '5521').replace(/\D/g, '').slice(-4) || '5521';
     
     // Clear previously added cards if replacing
     if (existingCards.length > 0) {
@@ -93,7 +98,7 @@ export const CreditCardsStep: React.FC<Props> = () => {
     }
 
     addCreditCard({
-      bankName: detectedBank,
+      bankName: detectedBank || 'Т-Банк Платинум',
       cardMask: `•${cleanMask}`,
       creditLimit: creditLimit,
       currentDebt: currentDebt,
@@ -108,8 +113,8 @@ export const CreditCardsStep: React.FC<Props> = () => {
   };
 
   const handleSaveManualEdit = () => {
-    const l = parseFloat(manualLimitInput);
-    const d = parseFloat(manualDebtInput);
+    const l = parseFloat(manualLimitInput.replace(/\s+/g, '').replace(',', '.'));
+    const d = parseFloat(manualDebtInput.replace(/\s+/g, '').replace(',', '.'));
     if (!isNaN(l) && l > 0) setCreditLimit(l);
     if (!isNaN(d) && d >= 0) setCurrentDebt(d);
     setIsManualEditing(false);
@@ -215,7 +220,7 @@ export const CreditCardsStep: React.FC<Props> = () => {
                   </span>
                   <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
                     <Check className="w-3 h-3" />
-                    <span>Синхронизировано с банком</span>
+                    <span>Добавлено в профиль</span>
                   </span>
                 </div>
               </div>
@@ -263,8 +268,8 @@ export const CreditCardsStep: React.FC<Props> = () => {
                   <div>
                     <label className="text-[10px] text-gray-500 dark:text-gray-400 block mb-0.5">Лимит (₽)</label>
                     <input
-                      type="number"
-                      step="1000"
+                      type="text"
+                      inputMode="decimal"
                       value={manualLimitInput}
                       onChange={(e) => setManualLimitInput(e.target.value)}
                       className="w-full text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-white"
@@ -273,8 +278,8 @@ export const CreditCardsStep: React.FC<Props> = () => {
                   <div>
                     <label className="text-[10px] text-gray-500 dark:text-gray-400 block mb-0.5">Текущий долг (₽)</label>
                     <input
-                      type="number"
-                      step="1000"
+                      type="text"
+                      inputMode="decimal"
                       value={manualDebtInput}
                       onChange={(e) => setManualDebtInput(e.target.value)}
                       className="w-full text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-white"
@@ -394,8 +399,8 @@ export const CreditCardsStep: React.FC<Props> = () => {
                     {isCustomPayment && (
                       <div className="pt-1">
                         <input
-                          type="number"
-                          step="500"
+                          type="text"
+                          inputMode="decimal"
                           placeholder={recommendedDebtPayment.toString()}
                           value={customPaymentAmount}
                           onChange={(e) => setCustomPaymentAmount(e.target.value)}
@@ -409,14 +414,34 @@ export const CreditCardsStep: React.FC<Props> = () => {
             </div>
           </div>
 
+          {isSaved && (
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 flex items-center gap-2 text-emerald-800 dark:text-emerald-300 text-xs font-medium animate-fadeIn">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>Параметры кредитной карты сохранены и применены к бюджету</span>
+            </div>
+          )}
+
           {/* Подтвердить и сохранить настройки карты */}
           <button
             type="button"
             onClick={handleApplyCard}
-            className="w-full py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+            className={`w-full py-3 px-4 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer ${
+              isSaved 
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
+                : 'bg-blue-600 hover:bg-blue-700 text-white active:scale-98'
+            }`}
           >
-            <Check className="w-4 h-4" />
-            <span>Сохранить параметры карты</span>
+            {isSaved ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-white" />
+                <span>Параметры карты сохранены</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                <span>Сохранить параметры карты</span>
+              </>
+            )}
           </button>
         </div>
       )}

@@ -1,19 +1,33 @@
 import React, { useState } from 'react';
 import { useProfile } from '../../context/ProfileContext';
 import { useBudget } from '../../context/BudgetContext';
+import { useAuth } from '../../context/AuthContext';
+import { AuthModal } from '../AuthModal';
 import { IncomeAnalysisStep } from './Steps/IncomeAnalysisStep';
 import { ProfileSelectionStep } from './Steps/ProfileSelectionStep';
 import { ProfileCustomizationStep } from './Steps/ProfileCustomizationStep';
 import { RegularExpensesStep } from './Steps/RegularExpensesStep';
+import { PlannedPurchasesStep } from './Steps/PlannedPurchasesStep';
 import { CreditCardsStep } from './Steps/CreditCardsStep';
 import { FoodManagementStep } from './Steps/FoodManagementStep';
 import { ConfirmationStep } from './Steps/ConfirmationStep';
-import { ArrowRight, ArrowLeft, Check, Sparkles } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Check, Sparkles, LogIn } from 'lucide-react';
+import { CushionConfig } from '../../types';
+import { CLOUD_SYNC_ENABLED } from '../../config';
 
 export const OnboardingFlow: React.FC = () => {
   const [step, setStep] = useState(0);
   const { profile, completeOnboarding } = useProfile();
   const { initializeBudgetFromProfile } = useBudget();
+  const { user } = useAuth();
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  const [cushionConfig, setCushionConfig] = useState<CushionConfig>({
+    isCushionEnabled: true,
+    cushionNormMode: 'percent',
+    cushionNormPercent: 10,
+    cushionNormFixedAmount: 8000,
+  });
 
   const isFreelance = profile?.profileType === 'freelance';
   const steps = isFreelance
@@ -21,6 +35,7 @@ export const OnboardingFlow: React.FC = () => {
         IncomeAnalysisStep,
         ProfileSelectionStep,
         RegularExpensesStep,
+        PlannedPurchasesStep,
         CreditCardsStep,
         FoodManagementStep,
         ConfirmationStep,
@@ -30,6 +45,7 @@ export const OnboardingFlow: React.FC = () => {
         ProfileSelectionStep,
         ProfileCustomizationStep,
         RegularExpensesStep,
+        PlannedPurchasesStep,
         CreditCardsStep,
         FoodManagementStep,
         ConfirmationStep,
@@ -43,7 +59,7 @@ export const OnboardingFlow: React.FC = () => {
 
   const handleFinish = () => {
     if (profile) {
-      initializeBudgetFromProfile(profile);
+      initializeBudgetFromProfile(profile, cushionConfig);
     }
     completeOnboarding();
   };
@@ -58,9 +74,21 @@ export const OnboardingFlow: React.FC = () => {
               <Sparkles className="w-4 h-4" />
               <span>Умная профилизация</span>
             </div>
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-              Шаг {currentStepIndex + 1} из {steps.length}
-            </span>
+            <div className="flex items-center gap-3">
+              {CLOUD_SYNC_ENABLED && !user && (
+                <button
+                  type="button"
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Войти</span>
+                </button>
+              )}
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                Шаг {currentStepIndex + 1} из {steps.length}
+              </span>
+            </div>
           </div>
 
           {/* Индикатор прогресса */}
@@ -79,7 +107,14 @@ export const OnboardingFlow: React.FC = () => {
 
           {/* Текущий экран */}
           <div className="min-h-[340px]">
-            <CurrentStep onNext={nextStep} onPrev={prevStep} isFirst={currentStepIndex === 0} isLast={currentStepIndex === steps.length - 1} />
+            <CurrentStep
+              onNext={nextStep}
+              onPrev={prevStep}
+              isFirst={currentStepIndex === 0}
+              isLast={currentStepIndex === steps.length - 1}
+              cushionConfig={cushionConfig}
+              onCushionConfigChange={setCushionConfig}
+            />
           </div>
         </div>
 
@@ -130,6 +165,11 @@ export const OnboardingFlow: React.FC = () => {
           )}
         </div>
       </div>
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+      />
     </div>
   );
 };

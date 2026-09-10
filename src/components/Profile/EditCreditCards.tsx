@@ -70,9 +70,9 @@ export const EditCreditCards: React.FC<EditCreditCardsProps> = ({ onBack, showTo
     e.preventDefault();
     if (!bankName.trim()) return;
 
-    const numLimit = parseFloat(creditLimit) || 0;
-    const numDebt = parseFloat(currentDebt) || 0;
-    const numPayment = strategy === 'debt' ? (parseFloat(monthlyPayment) || Math.round(numDebt / 6)) : 0;
+    const numLimit = parseFloat(creditLimit.replace(/\s+/g, '').replace(',', '.')) || 0;
+    const numDebt = parseFloat(currentDebt.replace(/\s+/g, '').replace(',', '.')) || 0;
+    const numPayment = strategy === 'debt' ? (parseFloat(monthlyPayment.replace(/\s+/g, '').replace(',', '.')) || Math.round(numDebt / 6)) : 0;
 
     if (editingCard) {
       updateCreditCard(editingCard.id, {
@@ -286,7 +286,8 @@ export const EditCreditCards: React.FC<EditCreditCardsProps> = ({ onBack, showTo
                     Кредитный лимит (₽)
                   </label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={creditLimit}
                     onChange={(e) => setCreditLimit(e.target.value)}
                     placeholder="150000"
@@ -302,7 +303,8 @@ export const EditCreditCards: React.FC<EditCreditCardsProps> = ({ onBack, showTo
                     Текущий долг (₽)
                   </label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={currentDebt}
                     onChange={(e) => setCurrentDebt(e.target.value)}
                     placeholder="42000"
@@ -361,7 +363,8 @@ export const EditCreditCards: React.FC<EditCreditCardsProps> = ({ onBack, showTo
                     Ежемесячный платёж для погашения (₽/мес)
                   </label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={monthlyPayment}
                     onChange={(e) => setMonthlyPayment(e.target.value)}
                     placeholder="7000"

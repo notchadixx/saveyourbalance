@@ -316,8 +316,7 @@ export async function fetchProductByGTIN(gtin: string): Promise<{
         message: 'Товар с таким штрих-кодом отсутствует в базе. Вы можете задать параметры вручную.',
       };
     }
-  } catch (error: any) {
-    console.warn('Open Food Facts fetch error:', error);
+  } catch {
     return {
       success: false,
       item: {

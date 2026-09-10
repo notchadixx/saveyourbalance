@@ -65,8 +65,8 @@ export const DataManagement: React.FC<DataManagementProps> = ({ onBack, showToas
         } else {
           setImportResult(validation);
         }
-      } catch (err: any) {
-        setErrorMessage('Не удалось прочитать JSON-файл: ' + err.message);
+      } catch (err: unknown) {
+        setErrorMessage('Не удалось прочитать JSON-файл: ' + (err instanceof Error ? err.message : String(err)));
         setImportResult(null);
       }
     };

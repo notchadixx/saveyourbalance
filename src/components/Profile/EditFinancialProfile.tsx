@@ -15,17 +15,17 @@ export const EditFinancialProfile: React.FC<EditFinancialProfileProps> = ({ onBa
   const [salaryDay, setSalaryDay] = useState<number>(state.salaryDateDay || profile?.mainSalaryDate || 5);
   const [hasAdvance, setHasAdvance] = useState<boolean>(Boolean(state.advanceDateDay || profile?.advanceDate));
   const [advanceDay, setAdvanceDay] = useState<number>(state.advanceDateDay || profile?.advanceDate || 20);
-  const [salaryAmount, setSalaryAmount] = useState<string>(String(state.currentSalary || profile?.fixedPartAmount || 82650));
+  const [salaryAmount, setSalaryAmount] = useState<string>(String(state.currentSalary || profile?.fixedPartAmount || 0));
   const [cushionMode, setCushionMode] = useState<'percent' | 'fixed'>(state.cushionNormMode || 'percent');
   const [cushionPercent, setCushionPercent] = useState<string>(String(state.cushionNormPercent ?? 10));
-  const [cushionFixed, setCushionFixed] = useState<string>(String(state.cushionNormFixedAmount ?? 8265));
+  const [cushionFixed, setCushionFixed] = useState<string>(String(state.cushionNormFixedAmount ?? 0));
   const [includeAdvance, setIncludeAdvance] = useState<boolean>(state.includeAdvanceInBudget ?? (profile?.advanceTreatment === 'include'));
   const [shouldRecalculatePeriod, setShouldRecalculatePeriod] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const parsedSalary = parseFloat(salaryAmount) || 0;
-  const parsedPercent = parseFloat(cushionPercent) || 10;
-  const parsedFixed = parseFloat(cushionFixed) || 0;
+  const parsedSalary = parseFloat(salaryAmount.replace(/\s+/g, '').replace(',', '.')) || 0;
+  const parsedPercent = parseFloat(cushionPercent.replace(/\s+/g, '').replace(',', '.')) || 10;
+  const parsedFixed = parseFloat(cushionFixed.replace(/\s+/g, '').replace(',', '.')) || 0;
 
   const calculatedMonthlyCushion = cushionMode === 'percent'
     ? Math.round(parsedSalary * (parsedPercent / 100))
@@ -113,10 +113,11 @@ export const EditFinancialProfile: React.FC<EditFinancialProfileProps> = ({ onBa
           </label>
           <div className="relative">
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               value={salaryAmount}
               onChange={(e) => setSalaryAmount(e.target.value)}
-              placeholder="82650"
+              placeholder="0"
               className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] text-sm font-bold text-[var(--color-text-main)] focus:outline-hidden focus:border-[var(--color-accent)]"
             />
             <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-[var(--color-text-muted)]">
@@ -244,9 +245,8 @@ export const EditFinancialProfile: React.FC<EditFinancialProfileProps> = ({ onBa
             </label>
             <div className="relative">
               <input
-                type="number"
-                min="1"
-                max="100"
+                type="text"
+                inputMode="decimal"
                 value={cushionPercent}
                 onChange={(e) => setCushionPercent(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] text-sm font-bold text-[var(--color-text-main)] focus:outline-hidden focus:border-[var(--color-accent)]"
@@ -263,7 +263,8 @@ export const EditFinancialProfile: React.FC<EditFinancialProfileProps> = ({ onBa
             </label>
             <div className="relative">
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 value={cushionFixed}
                 onChange={(e) => setCushionFixed(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] text-sm font-bold text-[var(--color-text-main)] focus:outline-hidden focus:border-[var(--color-accent)]"

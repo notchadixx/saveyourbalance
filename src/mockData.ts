@@ -7,7 +7,8 @@ import {
   MandatoryExpense,
   BankAccount,
   BankTransaction,
-  IncomeItem
+  IncomeItem,
+  ExpenseCategory
 } from './types';
 import { generatePeriodTemplateForMonth } from './utils/periodUtils';
 
@@ -45,45 +46,13 @@ export function getCurrentPeriodDates(baseSalaryDay: number = 5): { startDate: s
   };
 }
 
-const INITIAL_PLANNED_ITEMS: PlannedItem[] = [
-  // 1. Recurring items carried into current period (September)
-  { 
-    id: 'p8', 
-    title: 'Бенз', 
-    amount: 18000.00, 
-    spentAmount: 0.00, 
-    isProgressTracked: true, 
-    category: 'авто', 
-    isPaid: false, 
-    period: 'current',
-    autoRenew: true,
-    notes: 'Топливо на расчетный период' 
-  },
-  { id: 'p9', title: 'DDX', amount: 1900.00, category: 'обязательные', isPaid: false, notes: 'Фитнес-клуб месячный абонемент', period: 'current', autoRenew: true },
-  { id: 'p7', title: 'Ростелеком', amount: 857.83, category: 'обязательные', isPaid: false, notes: 'Интернет + ТВ тариф', period: 'current', autoRenew: true },
-
-  // 2. Archived completed one-time items from previous period (August)
-  { id: 'p1', title: 'Wildberries', amount: 6139.00, category: 'покупки', isPaid: true, notes: 'Одежда и бытовые мелочи', period: 'previous' },
-  { id: 'p2', title: 'OZON', amount: 1472.00, category: 'покупки', isPaid: true, notes: 'Заказ товаров для дома', period: 'previous' },
-  { id: 'p3', title: 'PS4', amount: 10000.00, category: 'игры_хобби', isPaid: true, notes: 'Игровая приставка', period: 'previous' },
-  { id: 'p4', title: 'It takes two', amount: 2950.00, category: 'игры_хобби', isPaid: true, notes: 'Кооперативная игра', period: 'previous' },
-  { id: 'p5', title: 'Геймпад', amount: 1250.00, category: 'игры_хобби', isPaid: true, notes: 'Дополнительный джойстик DualShock', period: 'previous' },
-  { id: 'p6', title: 'МФУ', amount: 14299.00, category: 'покупки', isPaid: true, notes: 'Принтер/сканер для дома', period: 'previous' },
-  { id: 'p10', title: 'Джоггеры зимние', amount: 3981.00, category: 'покупки', isPaid: true, notes: 'Теплая одежда на осень-зиму', period: 'previous' },
-  { id: 'p11', title: 'Полка навесная', amount: 4610.00, category: 'покупки', isPaid: true, notes: 'Мебель для комнаты', period: 'previous' },
-  { id: 'p12', title: 'Сход-развал', amount: 2000.00, category: 'авто', isPaid: true, notes: 'Техническое обслуживание подвески', period: 'previous' },
-  { id: 'p13', title: 'Наконечник рулевой тяги', amount: 1635.00, category: 'авто', isPaid: true, notes: 'Запчасть для автомобиля', period: 'previous' },
-  { id: 'p14', title: 'Новоселье (еда + напитки)', amount: 8147.04, category: 'мероприятия', isPaid: true, notes: 'Празднование новоселья с друзьями', period: 'previous' },
-  { id: 'p15', title: 'Подарок Соне', amount: 2500.00, category: 'мероприятия', isPaid: true, notes: 'Подарок на день рождения', period: 'previous' },
-  { id: 'p16', title: 'Корректировка', amount: 336.60, category: 'прочее', isPaid: true, notes: 'Банковские комиссии и округления', period: 'previous' },
-  { id: 'p17', title: 'Билеты на поезд', amount: 12782.00, category: 'мероприятия', isPaid: true, notes: 'Поездка туда и обратно', period: 'previous' },
-];
+const INITIAL_PLANNED_ITEMS: PlannedItem[] = [];
 
 const INITIAL_WISHLIST: WishlistItem[] = [
   {
     id: 'w1',
-    title: 'Смарт-часы Huawei',
-    url: 'https://www.dns-shop.ru/product/3ef75bb05',
+    title: 'Смарт-часы с пульсометром',
+    url: 'https://example.com/product/smartwatch',
     marketplace: 'dns',
     price: 12799.00,
     isPurchased: false,
@@ -93,8 +62,8 @@ const INITIAL_WISHLIST: WishlistItem[] = [
   },
   {
     id: 'w2',
-    title: 'Набор инструментов',
-    url: 'https://www.dns-shop.ru/product/2a380f7a4',
+    title: 'Набор инструментов универсальный',
+    url: 'https://example.com/product/toolkit',
     marketplace: 'dns',
     price: 9099.00,
     isPurchased: false,
@@ -104,8 +73,8 @@ const INITIAL_WISHLIST: WishlistItem[] = [
   },
   {
     id: 'w3',
-    title: 'Монитор',
-    url: 'https://www.dns-shop.ru/product/7329627da',
+    title: 'Монитор 27"',
+    url: 'https://example.com/product/monitor',
     marketplace: 'dns',
     price: 12199.00,
     isPurchased: false,
@@ -115,41 +84,41 @@ const INITIAL_WISHLIST: WishlistItem[] = [
   },
   {
     id: 'w4',
-    title: 'Видеокарта',
-    url: 'https://www.dns-shop.ru/product/5a2b97240',
+    title: 'Комплектующие для ПК',
+    url: 'https://example.com/product/pc-components',
     marketplace: 'dns',
     price: 77499.00,
     isPurchased: false,
     priority: 'high',
     category: 'Компьютеры',
-    notes: 'RTX 4070 Ti 12GB для рендеринга и игр',
+    notes: 'Обновление рабочего компьютера',
   },
   {
     id: 'w5',
-    title: 'Кольцо помолвочное',
-    url: 'https://sunlight.net/catalog/ring_380556.htm',
-    marketplace: 'sunlight',
+    title: 'Подарочный набор',
+    url: 'https://example.com/product/gift-set',
+    marketplace: 'other',
     price: 29460.00,
     isPurchased: false,
     priority: 'high',
-    category: 'Ювелирные изделия',
-    notes: 'Белое золото с бриллиантом',
+    category: 'Подарки',
+    notes: 'Подарок к семейному празднику',
   },
   {
     id: 'w6',
-    title: 'Кольцо помолвочное (вариант 2)',
-    url: 'https://sunlight.net/catalog/ring_408617.htm',
-    marketplace: 'sunlight',
+    title: 'Наручные часы классические',
+    url: 'https://example.com/product/classic-watch',
+    marketplace: 'other',
     price: 27193.00,
     isPurchased: false,
     priority: 'high',
-    category: 'Ювелирные изделия',
-    notes: 'Классическая огранка',
+    category: 'Аксессуары',
+    notes: 'Механический хронограф',
   },
   {
     id: 'w7',
-    title: 'Клавиатура механика с NumPad (DNS)',
-    url: 'https://www.dns-shop.ru/product/ed6ec83b9',
+    title: 'Клавиатура механическая',
+    url: 'https://example.com/product/mech-keyboard',
     marketplace: 'dns',
     price: 6399.00,
     isPurchased: false,
@@ -159,10 +128,9 @@ const INITIAL_WISHLIST: WishlistItem[] = [
   },
   {
     id: 'w8',
-    title: 'Клавиатура механика с NumPad (OZON)',
-    url: 'https://ozon.ru/t/HqkMFcq',
+    title: 'Беспроводная мышь эргономичная',
+    url: 'https://example.com/product/wireless-mouse',
     marketplace: 'ozon',
-    articleId: '1768220048',
     price: 6033.00,
     isPurchased: false,
     priority: 'medium',
@@ -171,10 +139,9 @@ const INITIAL_WISHLIST: WishlistItem[] = [
   },
   {
     id: 'w9',
-    title: 'Кронштейн для двух мониторов',
-    url: 'https://www.ozon.ru/product/kronshteyn-dlya',
+    title: 'Кронштейн для монитора',
+    url: 'https://example.com/product/monitor-mount',
     marketplace: 'ozon',
-    articleId: '2936983737',
     price: 2001.00,
     isPurchased: true,
     priority: 'medium',
@@ -183,34 +150,31 @@ const INITIAL_WISHLIST: WishlistItem[] = [
   },
   {
     id: 'w10',
-    title: 'Готический смокинг',
-    url: 'https://www.wildberries.ru/catalog/9295270',
+    title: 'Костюм классический',
+    url: 'https://example.com/product/classic-suit',
     marketplace: 'wildberries',
-    articleId: '968420676',
     price: 2504.00,
     isPurchased: false,
     priority: 'low',
     category: 'Одежда',
-    notes: 'Праздничный пиджак для фотосессии',
+    notes: 'Классический пиджак',
   },
   {
     id: 'w11',
-    title: 'Мужские готические брюки с змейкой',
-    url: 'https://www.wildberries.ru/catalog/1062011',
+    title: 'Брюки повседневные',
+    url: 'https://example.com/product/trousers',
     marketplace: 'wildberries',
-    articleId: '1062011646',
     price: 2156.00,
     isPurchased: false,
     priority: 'low',
     category: 'Одежда',
-    notes: 'В комплекте к смокингу',
+    notes: 'Прямой крой, практичная ткань',
   },
   {
     id: 'w12',
-    title: 'Туфли классические',
-    url: 'https://ozon.ru/t/hi0RbwJ',
+    title: 'Туфли классические демисезонные',
+    url: 'https://example.com/product/shoes',
     marketplace: 'ozon',
-    articleId: '5454376965',
     price: 3561.00,
     isPurchased: false,
     priority: 'medium',
@@ -220,10 +184,10 @@ const INITIAL_WISHLIST: WishlistItem[] = [
 ];
 
 const INITIAL_MANDATORY_EXPENSES: MandatoryExpense[] = [
-  { id: 'm1', title: 'Ростелеком (интернет и связь)', amount: 845.00, category: 'Связь' },
-  { id: 'm2', title: 'Бензин', amount: 18000.00, category: 'Авто' },
-  { id: 'm3', title: 'DDX Фитнес', amount: 1900.00, category: 'Спорт' },
-  { id: 'm4', title: 'Прочее (питание, такси и т.д.)', amount: 33686.37, category: 'Жизнь' },
+  { id: 'm1', title: 'Интернет и связь', amount: 845.00, category: 'Связь' },
+  { id: 'm2', title: 'Бензин / Транспорт', amount: 18000.00, category: 'Авто' },
+  { id: 'm3', title: 'Фитнес-клуб', amount: 1900.00, category: 'Спорт' },
+  { id: 'm4', title: 'Прочее (питание, быт)', amount: 33686.37, category: 'Жизнь' },
 ];
 
 const RAW_DAILY_EXPENSES = [
@@ -241,7 +205,7 @@ const RAW_DAILY_EXPENSES = [
   { date: '2026-08-12', dayNumber: 12, dayOfWeekShort: 'Ср', dayOfWeekFull: 'Среда', spent: 812.62, items: [{ title: 'Перекресток продукты', amount: 812.62, category: 'продукты', catName: 'Перекресток' }] },
   { date: '2026-08-13', dayNumber: 13, dayOfWeekShort: 'Чт', dayOfWeekFull: 'Четверг', spent: 560.88, items: [{ title: 'Бизнес-ланч', amount: 560.88, category: 'еда_вне_дома', catName: 'Кафе' }] },
   { date: '2026-08-14', dayNumber: 14, dayOfWeekShort: 'Пт', dayOfWeekFull: 'Пятница', spent: 155.00, items: [{ title: 'Магнит продукты', amount: 155.00, category: 'продукты', catName: 'Магнит' }] },
-  { date: '2026-08-15', dayNumber: 15, dayOfWeekShort: 'Сб', dayOfWeekFull: 'Суббота', spent: 1285.00, items: [{ title: 'Ужин с друзьями', amount: 1285.00, category: 'развлечения', catName: 'Ресторан' }] },
+  { date: '2026-08-15', dayNumber: 15, dayOfWeekShort: 'Сб', dayOfWeekFull: 'Суббота', spent: 1285.00, items: [{ title: 'Ужин в кафе', amount: 1285.00, category: 'еда_вне_дома', catName: 'Кафе' }] },
   { date: '2026-08-16', dayNumber: 16, dayOfWeekShort: 'Вс', dayOfWeekFull: 'Воскресенье', spent: 100.00, items: [{ title: 'Вода и снек', amount: 100.00, category: 'продукты', catName: 'Магазин' }] },
   { date: '2026-08-17', dayNumber: 17, dayOfWeekShort: 'Пн', dayOfWeekFull: 'Понедельник', spent: 305.00, items: [{ title: 'Обед', amount: 305.00, category: 'еда_вне_дома', catName: 'Столовая' }] },
   { date: '2026-08-18', dayNumber: 18, dayOfWeekShort: 'Вт', dayOfWeekFull: 'Вторник', spent: 155.00, items: [{ title: 'Магнит мелочи', amount: 155.00, category: 'продукты', catName: 'Магнит' }] },
@@ -323,8 +287,8 @@ const RAW_DAILY_EXPENSES = [
 ];
 
 export function buildInitialDays(): DayRecord[] {
-  const augustNormLimit = 1859.46;
-  const septNormLimit = 2110.68;
+  const augustNormLimit = 2000.00;
+  const septNormLimit = 2000.00;
   const today = getTodayDateString();
 
   // 1. Historical days from August (2026-08-01 through 2026-09-03)
@@ -338,7 +302,7 @@ export function buildInitialDays(): DayRecord[] {
       title: item.title,
       amount: item.amount,
       category: item.catName,
-      categoryType: item.category as any,
+      categoryType: item.category as ExpenseCategory,
       time: itemIdx === 0 ? '13:20' : itemIdx === 1 ? '15:45' : '17:30',
       isConfirmed: true,
     }));
@@ -386,7 +350,7 @@ export function buildInitialDays(): DayRecord[] {
       normLimit: septNormLimit,
       deviation: septNormLimit,
       budgetRemainingOnDate: septNormLimit,
-      totalRemaining: 11803.76,
+      totalRemaining: 12000.00,
       isToday,
       isPast,
     });
@@ -398,15 +362,15 @@ export function buildInitialDays(): DayRecord[] {
 }
 
 export function buildCushionSchedule(
-  currentSalary: number = 82650.00,
+  currentSalary: number = 80000.00,
   isDepositMade: boolean = true,
-  actualDepositAmount: number = 8265.00,
-  bankAccumulated: number = 8269.53,
+  actualDepositAmount: number = 8000.00,
+  bankAccumulated: number = 10000.00,
   startMonth: number = 8,
   startYear: number = 2026,
   normMode: 'percent' | 'fixed' = 'percent',
   normPercent: number = 10,
-  normFixedAmount: number = 8265.00
+  normFixedAmount: number = 8000.00
 ): CushionMonthPlan[] {
   const schedule: CushionMonthPlan[] = [];
   const monthlyNorm = normMode === 'fixed' 
@@ -491,24 +455,12 @@ export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
     bankId: 'tbank',
     bankName: 'Т-Банк',
     accountType: 'checking',
-    accountName: 'Black Дебетовая',
+    accountName: 'Основная карта',
     accountNumberMask: '•4821',
     balance: 24810.00,
     lastSyncedAt: new Date().toISOString(),
     isConnected: true,
     color: '#fed838',
-  },
-  {
-    id: 'bank-sber-card',
-    bankId: 'sber',
-    bankName: 'СберБанк',
-    accountType: 'checking',
-    accountName: 'СберКарта Основная',
-    accountNumberMask: '•9022',
-    balance: 6240.00,
-    lastSyncedAt: new Date().toISOString(),
-    isConnected: true,
-    color: '#21a038',
   },
   {
     id: 'bank-alfa-savings',
@@ -517,7 +469,7 @@ export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
     accountType: 'savings',
     accountName: 'Альфа-Счет (Подушка 13.5%)',
     accountNumberMask: '•3312',
-    balance: 8269.53,
+    balance: 10000.00,
     interestRate: 13.5,
     lastSyncedAt: new Date().toISOString(),
     isConnected: true,
@@ -532,24 +484,24 @@ export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
     bankAccountId: 'bank-tbank-card',
     bankName: 'Т-Банк',
     accountNumberMask: '•4821',
-    title: 'Зачисление зарплаты (ООО «Технологии»)',
-    merchant: 'ООО «Технологии»',
-    amount: 82650.00,
+    title: 'Зачисление зарплаты (Основная работа)',
+    merchant: 'Зарплатный проект',
+    amount: 80000.00,
     type: 'income',
-    categoryType: 'зарплата' as any,
+    categoryType: 'зарплата',
     categoryName: 'Зарплата',
     date: getTodayDateString(),
     time: '10:00',
     status: 'pending',
-    rawSnippet: 'Т-Банк. Зачисление зарплаты +82 650.00 ₽ от ООО «Технологии». Карта •4821',
+    rawSnippet: 'Т-Банк. Зачисление зарплаты +80 000.00 ₽. Карта •4821',
   },
   {
     id: 'tx-fuel-1',
     bankAccountId: 'bank-tbank-card',
     bankName: 'Т-Банк',
     accountNumberMask: '•4821',
-    title: 'АЗС Газпромнефть (Бензин АИ-95)',
-    merchant: 'Газпромнефть АЗС',
+    title: 'АЗС (Бензин АИ-95)',
+    merchant: 'АЗС',
     amount: 2500.00,
     type: 'expense',
     categoryType: 'авто',
@@ -557,15 +509,15 @@ export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
     date: getTodayDateString(),
     time: '12:30',
     status: 'pending',
-    rawSnippet: 'Т-Банк. Оплата 2 500.00 ₽, Газпромнефть АЗС №41. Карта •4821',
+    rawSnippet: 'Т-Банк. Оплата 2 500.00 ₽, АЗС. Карта •4821',
   },
   {
     id: 'tx-wb-1',
     bankAccountId: 'bank-tbank-card',
     bankName: 'Т-Банк',
     accountNumberMask: '•4821',
-    title: 'Пополнение WB Кошелька (Wildberries)',
-    merchant: 'Wildberries',
+    title: 'Маркетплейс (Одежда и быт)',
+    merchant: 'Маркетплейс',
     amount: 1500.00,
     type: 'expense',
     categoryType: 'покупки',
@@ -573,15 +525,15 @@ export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
     date: getTodayDateString(),
     time: '13:10',
     status: 'pending',
-    rawSnippet: 'Т-Банк. Перевод 1 500.00 ₽ WB Кошелек Баланс. Карта •4821',
+    rawSnippet: 'Т-Банк. Оплата 1 500.00 ₽ Маркетплейс. Карта •4821',
   },
   {
     id: 'tx-tb-1',
     bankAccountId: 'bank-tbank-card',
     bankName: 'Т-Банк',
     accountNumberMask: '•4821',
-    title: 'ВкусВилл (Продукты и перекус)',
-    merchant: 'ВкусВилл',
+    title: 'Супермаркет (Продукты на дом)',
+    merchant: 'Супермаркет',
     amount: 640.00,
     type: 'expense',
     categoryType: 'продукты',
@@ -589,15 +541,15 @@ export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
     date: getTodayDateString(),
     time: '14:15',
     status: 'pending',
-    rawSnippet: 'Т-Банк. Покупка 640.00 ₽, ВкусВилл. Карта •4821',
+    rawSnippet: 'Т-Банк. Покупка 640.00 ₽, Супермаркет. Карта •4821',
   },
   {
     id: 'tx-tb-2',
     bankAccountId: 'bank-tbank-card',
     bankName: 'Т-Банк',
     accountNumberMask: '•4821',
-    title: 'Яндекс Go (Такси в центр)',
-    merchant: 'Яндекс Go',
+    title: 'Такси (Поездка по городу)',
+    merchant: 'Такси',
     amount: 380.00,
     type: 'expense',
     categoryType: 'транспорт',
@@ -605,15 +557,15 @@ export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
     date: getTodayDateString(),
     time: '16:40',
     status: 'pending',
-    rawSnippet: 'Т-Банк. Покупка 380.00 ₽, Yandex Go. Карта •4821',
+    rawSnippet: 'Т-Банк. Покупка 380.00 ₽, Такси. Карта •4821',
   },
   {
     id: 'tx-sb-1',
-    bankAccountId: 'bank-sber-card',
-    bankName: 'СберБанк',
-    accountNumberMask: '•9022',
-    title: 'Аптека Ригла (Витамины и аспирин)',
-    merchant: 'Аптека Ригла',
+    bankAccountId: 'bank-tbank-card',
+    bankName: 'Т-Банк',
+    accountNumberMask: '•4821',
+    title: 'Аптека (Витамины и медикаменты)',
+    merchant: 'Аптека',
     amount: 420.00,
     type: 'expense',
     categoryType: 'здоровье',
@@ -621,14 +573,14 @@ export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
     date: getTodayDateString(),
     time: '17:05',
     status: 'pending',
-    rawSnippet: 'СберБанк: Покупка 420р Аптека Ригла. Баланс 6240р',
+    rawSnippet: 'Т-Банк: Покупка 420.00 ₽ Аптека. Карта •4821',
   },
   {
     id: 'tx-inc-1',
     bankAccountId: 'bank-tbank-card',
     bankName: 'Т-Банк',
     accountNumberMask: '•4821',
-    title: 'Перевод от Александра В. (Возврат долга)',
+    title: 'Входящий перевод (Возврат долга)',
     merchant: 'СБП Перевод',
     amount: 2500.00,
     type: 'income',
@@ -637,15 +589,15 @@ export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
     date: getTodayDateString(),
     time: '11:30',
     status: 'pending',
-    rawSnippet: 'Т-Банк. Перевод +2 500.00 ₽ от Александр В. (СБП)',
+    rawSnippet: 'Т-Банк. Перевод +2 500.00 ₽ (СБП)',
   },
   {
     id: 'tx-inc-2',
-    bankAccountId: 'bank-sber-card',
-    bankName: 'СберБанк',
-    accountNumberMask: '•9022',
+    bankAccountId: 'bank-tbank-card',
+    bankName: 'Т-Банк',
+    accountNumberMask: '•4821',
     title: 'Кэшбэк и бонусы за прошлый месяц',
-    merchant: 'СберСпасибо',
+    merchant: 'Банковский кэшбэк',
     amount: 840.00,
     type: 'income',
     categoryType: 'прочее',
@@ -653,15 +605,15 @@ export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
     date: getTodayDateString(),
     time: '09:00',
     status: 'pending',
-    rawSnippet: 'СберБанк. Зачисление кэшбэка +840.00 ₽',
+    rawSnippet: 'Т-Банк. Зачисление кэшбэка +840.00 ₽',
   },
   {
     id: 'tx-inc-3',
     bankAccountId: 'bank-tbank-card',
     bankName: 'Т-Банк',
     accountNumberMask: '•4821',
-    title: 'Поступление от Авито (Продажа монитора)',
-    merchant: 'Avito Доставка',
+    title: 'Поступление от продажи вещей',
+    merchant: 'Сервис объявлений',
     amount: 5400.00,
     type: 'income',
     categoryType: 'прочее',
@@ -669,14 +621,14 @@ export const INITIAL_PENDING_TRANSACTIONS: BankTransaction[] = [
     date: getTodayDateString(),
     time: '14:20',
     status: 'pending',
-    rawSnippet: 'Т-Банк. Зачисление +5 400.00 ₽ Avito Заказ',
+    rawSnippet: 'Т-Банк. Зачисление +5 400.00 ₽ Сервис объявлений',
   },
 ];
 
 export const INITIAL_INCOMES: IncomeItem[] = [
   {
     id: 'inc-init-1',
-    title: 'Подработка (Консультация по дизайну)',
+    title: 'Подработка (Консультация)',
     amount: 6000.00,
     date: '2026-08-15',
     time: '18:00',
@@ -685,12 +637,12 @@ export const INITIAL_INCOMES: IncomeItem[] = [
     category: 'Подработка',
     isIncludedInBudget: true,
     isManual: true,
-    notes: 'Оплата за аудит мобильного интерфейса',
+    notes: 'Оплата за выполненную работу',
     createdAt: '2026-08-15T18:00:00Z',
   },
   {
     id: 'inc-init-2',
-    title: 'Возврат долга наличными от Сергея',
+    title: 'Возврат долга наличными',
     amount: 3000.00,
     date: '2026-08-22',
     time: '15:30',
@@ -699,7 +651,7 @@ export const INITIAL_INCOMES: IncomeItem[] = [
     category: 'Возврат долга',
     isIncludedInBudget: true,
     isManual: true,
-    notes: 'Наличные переданы при встрече',
+    notes: 'Возврат долга при встрече',
     createdAt: '2026-08-22T15:30:00Z',
   }
 ];
@@ -720,10 +672,10 @@ export const INITIAL_BUDGET_STATE: BudgetState = {
   isAdvanceReceived: false,
   isSalaryReceived: false,
   
-  total30DaysBudget: 11803.76,
-  previousMonthRemainder: 11803.76,
+  total30DaysBudget: 12000.00,
+  previousMonthRemainder: 12000.00,
   safetyCushionDeposit: 0.00,
-  currentSalary: 82650.00,
+  currentSalary: 80000.00,
   
   isBalanceSynced: false,
   
@@ -731,19 +683,19 @@ export const INITIAL_BUDGET_STATE: BudgetState = {
   days: buildInitialDays(),
   wishlist: INITIAL_WISHLIST,
   
-  cushionAccumulated: 8269.53,
+  cushionAccumulated: 10000.00,
   cushionCash: 15000.00, // Учет наличных сбережений
-  cushionTargetAmount: 163294.11, // 3 месяца
+  cushionTargetAmount: 150000.00, // 3 месяца
   cushionTargetMonthsCount: 3,
-  cushionMonthlyContribution: 8265.00,
+  cushionMonthlyContribution: 8000.00,
   mandatoryExpenses: INITIAL_MANDATORY_EXPENSES,
   mandatoryExpensesMode: 'manual',
   isCushionDepositDoneThisMonth: false,
   actualCushionDepositThisMonth: 0.00,
   cushionNormMode: 'percent',
   cushionNormPercent: 10,
-  cushionNormFixedAmount: 8265.00,
-  cushionSchedule: buildCushionSchedule(82650.00, false, 0.00, 8269.53, 9, 2026, 'percent', 10, 8265.00),
+  cushionNormFixedAmount: 8000.00,
+  cushionSchedule: buildCushionSchedule(80000.00, false, 0.00, 10000.00, 9, 2026, 'percent', 10, 8000.00),
   
   // Banking integration data
   bankAccounts: INITIAL_BANK_ACCOUNTS,
@@ -944,4 +896,5 @@ export const INITIAL_BUDGET_STATE: BudgetState = {
   },
 
   isMobileFrame: false,
+  hasSeenOnboardingTour: false,
 };

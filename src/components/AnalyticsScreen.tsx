@@ -109,6 +109,7 @@ export const AnalyticsScreen: React.FC = () => {
 
       {/* 2. Main Dark Navy Metric Card */}
       <motion.div 
+        id="tour-analytics-forecast"
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-[#1a2b3c] dark:bg-[#1e293b] rounded-2xl p-5 text-white shadow-md relative overflow-hidden border border-transparent dark:border-[var(--color-border)]"

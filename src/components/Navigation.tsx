@@ -23,6 +23,7 @@ import {
   Settings
 } from 'lucide-react';
 import { AuthModal } from './AuthModal';
+import { CLOUD_SYNC_ENABLED } from '../config';
 import { BankSyncModal } from './BankSyncModal';
 import { ProfileScreen } from './Profile/ProfileScreen';
 
@@ -100,44 +101,46 @@ export const TopBar: React.FC<NavigationProps> = ({ onOpenAddExpense, onOpenSett
 
         <div className="flex items-center gap-1.5">
           {/* User Auth & Cloud Sync Button */}
-          <button
-            onClick={() => setIsAuthModalOpen(true)}
-            title={user ? `Аккаунт: ${user.email} (Firestore)` : 'Войти через Google'}
-            className="p-1 sm:px-2 sm:py-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-main)] hover:border-[var(--color-border-strong)] transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
-          >
-            {user ? (
-              <>
-                {user.photoURL ? (
-                  <img
-                    src={user.photoURL}
-                    alt={user.displayName || 'User'}
-                    className="w-5 h-5 rounded-full object-cover border border-[var(--color-border-strong)]"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-5 h-5 rounded-full bg-[#006d37] text-white flex items-center justify-center font-bold text-[10px]">
-                    {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+          {CLOUD_SYNC_ENABLED && (
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              title={user ? `Аккаунт: ${user.email} (Firestore)` : 'Войти через Google'}
+              className="p-1 sm:px-2 sm:py-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-main)] hover:border-[var(--color-border-strong)] transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
+            >
+              {user ? (
+                <>
+                  {user.photoURL ? (
+                    <img
+                      src={user.photoURL}
+                      alt={user.displayName || 'User'}
+                      className="w-5 h-5 rounded-full object-cover border border-[var(--color-border-strong)]"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full bg-[#006d37] text-white flex items-center justify-center font-bold text-[10px]">
+                      {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+                    </div>
+                  )}
+                  <div className="hidden sm:flex items-center gap-1">
+                    <span className="text-xs font-semibold max-w-[80px] truncate text-[var(--color-text-main)]">
+                      {user.displayName?.split(' ')[0] || 'Профиль'}
+                    </span>
+                    <span className={`w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`} />
                   </div>
-                )}
-                <div className="hidden sm:flex items-center gap-1">
-                  <span className="text-xs font-semibold max-w-[80px] truncate text-[var(--color-text-main)]">
-                    {user.displayName?.split(' ')[0] || 'Профиль'}
-                  </span>
-                  <span className={`w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`} />
-                </div>
-              </>
-            ) : (
-              <>
-                <LogIn className="w-4 h-4 text-[var(--color-accent)]" />
-                <span className="hidden sm:inline text-xs font-bold text-[var(--color-accent)]">Вход</span>
-              </>
-            )}
-          </button>
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4 text-[var(--color-accent)]" />
+                  <span className="hidden sm:inline text-xs font-bold text-[var(--color-accent)]">Вход</span>
+                </>
+              )}
+            </button>
+          )}
 
           {/* Bank Synchronization Hub Button */}
           <button
             onClick={() => setIsBankModalOpen(true)}
-            title={`Синхронизация банков (${state.bankAccounts?.length || 0} счетов)`}
+            title={`Банковские счета и чеки (${state.bankAccounts?.length || 0} счетов)`}
             className="p-1.5 sm:px-2 sm:py-1 rounded-xl border border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition-all shadow-xs flex items-center gap-1 active:scale-95 relative"
           >
             <Landmark className="w-4 h-4" />
@@ -201,6 +204,7 @@ export const TopBar: React.FC<NavigationProps> = ({ onOpenAddExpense, onOpenSett
           {/* Quick Add Expense */}
           {onOpenAddExpense && (
             <button
+              id="tour-add-expense-topbar"
               onClick={onOpenAddExpense}
               className="flex items-center gap-1 bg-[#041627] dark:bg-[#10b981] dark:text-[#041627] hover:bg-[#1a2b3c] dark:hover:bg-[#059669] text-white text-xs font-semibold px-2.5 py-1.5 rounded-xl shadow-xs active:scale-95 transition-all"
             >

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
+import { CLOUD_SYNC_ENABLED } from '../config';
 import { 
   X, 
   LogOut, 
@@ -21,7 +22,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const { user, loading, error, signInWithGoogle, signOut, clearError } = useAuth();
   const { syncStatus } = useBudget();
 
-  if (!isOpen) return null;
+  if (!isOpen || !CLOUD_SYNC_ENABLED) return null;
 
   const handleSignIn = async () => {
     try {

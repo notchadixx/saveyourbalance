@@ -202,7 +202,8 @@ export const CreditCardDebtSection: React.FC = () => {
                         Текущий остаток долга (₽)
                       </label>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={newDebtVal}
                         onChange={(e) => setNewDebtVal(e.target.value)}
                         className="w-full text-xs font-semibold px-2 py-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-main)]"
@@ -213,7 +214,8 @@ export const CreditCardDebtSection: React.FC = () => {
                         Платёж в бюджет (₽/мес)
                       </label>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={newMonthlyPayVal}
                         onChange={(e) => setNewMonthlyPayVal(e.target.value)}
                         className="w-full text-xs font-semibold px-2 py-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-main)]"

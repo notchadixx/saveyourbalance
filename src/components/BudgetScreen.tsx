@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useBudget, formatRubles } from '../context/BudgetContext';
+import { useBudget, formatRubles, calculateMonthlyCushionNorm } from '../context/BudgetContext';
 import { 
   Plus, 
   ShoppingCart, 
@@ -12,7 +12,11 @@ import {
   X,
   Check,
   Clock,
-  CalendarDays
+  CalendarDays,
+  CreditCard,
+  RefreshCw,
+  SlidersHorizontal,
+  Wallet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ExpenseCategory, ExpenseItem } from '../types';
@@ -46,15 +50,32 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
     baseDailyNorm, 
     daysToSalary, 
     freeDiscretionaryBudget,
+    totalCheckingBankBalance,
+    hasCardBalance,
+    realDiscretionaryRemainder,
+    unreachedPlannedExpenses,
     totalIncludedAdditionalIncomes,
+    isAdvanceDateReached,
+    effectiveAdvanceAmount,
+    actualAdvanceDay,
+    actualAdvanceDateStr,
+    isAdvanceShifted,
+    totalFundsWithAdvance,
     receiveSalary,
     addExpenseToDate,
     updateExpense,
-    deleteExpenseFromDate 
+    deleteExpenseFromDate,
+    addBankAccount,
+    updateBankAccountBalance,
+    setOverallCheckingCardBalance,
+    setActiveTab,
   } = useBudget();
 
   const [isEditBudgetOpen, setIsEditBudgetOpen] = useState(false);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [isManualBalanceOpen, setIsManualBalanceOpen] = useState(false);
+  const [manualBalanceInput, setManualBalanceInput] = useState('');
+  const [newPeriodModalOpen, setNewPeriodModalOpen] = useState(false);
 
   // Inline Add Expense State
   const [isAddingInline, setIsAddingInline] = useState(false);
@@ -86,6 +107,27 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
     const found = CATEGORY_OPTIONS.find(c => c.type === categoryType);
     return found ? found.emoji : '📝';
   };
+
+  // Synchronized monthly cushion deposit matching the "Взнос за текущий месяц" widget
+  const cushionMonthlyDeposit = React.useMemo(() => {
+    if (state.isCushionEnabled === false) return 0;
+    const currentMonthlyNorm = calculateMonthlyCushionNorm(
+      state.currentSalary || 0,
+      state.cushionNormMode || 'percent',
+      state.cushionNormPercent ?? 10,
+      state.cushionNormFixedAmount ?? 0
+    );
+    return state.actualCushionDepositThisMonth !== undefined && state.actualCushionDepositThisMonth > 0
+      ? state.actualCushionDepositThisMonth
+      : currentMonthlyNorm;
+  }, [
+    state.isCushionEnabled,
+    state.currentSalary,
+    state.cushionNormMode,
+    state.cushionNormPercent,
+    state.cushionNormFixedAmount,
+    state.actualCushionDepositThisMonth
+  ]);
 
   // Accurate daily comparison: actual spent vs base daily norm
   const spentForDay = selectedDayRecord?.spent || 0;
@@ -162,83 +204,183 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
     setEditingExpenseId(null);
   };
 
+  const handleSaveManualBalance = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(manualBalanceInput.replace(/\s+/g, '').replace(',', '.'));
+    if (isNaN(val)) return;
+
+    setOverallCheckingCardBalance(val);
+    setIsManualBalanceOpen(false);
+  };
+
   return (
     <div className="flex flex-col gap-4 pb-28 pt-2">
       {/* 1. Main Summary Card with Edit Trigger & Period Control */}
       <motion.div 
+        id="tour-budget-summary"
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-[var(--color-bg-card)] rounded-2xl p-5 shadow-xs border border-[var(--color-border)] relative overflow-hidden"
       >
-        <div className="flex justify-between items-start mb-1.5 flex-wrap gap-2">
+        <div className="flex justify-between items-start mb-2 flex-wrap gap-2">
           <div className="flex flex-col">
-            <span className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider">
-              ОБЩИЙ БЮДЖЕТ НА ПЕРИОД
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider flex items-center gap-1.5">
+                <CreditCard className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                СЕЙЧАС НА КАРТЕ
+              </span>
+              {hasCardBalance && (
+                <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/50 px-2 py-0.5 rounded-full">
+                  Реальный баланс
+                </span>
+              )}
+            </div>
             <span className="text-xs font-semibold text-[var(--color-text-secondary)]">
               {state.periodTitle || '05.08.2026 — 03.09.2026'}
             </span>
           </div>
 
-          <button
-            onClick={() => setIsEditBudgetOpen(true)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[var(--color-bg-card-subtle)] hover:bg-[var(--color-bg-card-muted)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-main)] border border-[var(--color-border)] transition-all text-xs font-semibold shadow-xs active:scale-95 cursor-pointer"
-            title="Редактировать параметры бюджета"
-          >
-            <Pencil className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-            <span>Изменить</span>
-          </button>
-        </div>
-
-        <div className="text-3xl sm:text-4xl font-extrabold text-[var(--color-text-main)] tracking-tight mb-3">
-          {formatRubles(state.total30DaysBudget, { showCents: false })}
-        </div>
-
-        {/* Informative banner when waiting for salary arrival */}
-        {!state.isSalaryReceived && (
-          <div className="mb-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/40 flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
-              <div className="text-xs text-blue-900 dark:text-blue-200">
-                <span className="font-bold">Ожидается поступление зарплаты.</span>
-                <span className="block text-[11px] text-blue-700 dark:text-blue-300">
-                  До зачисления бюджет равен чистому остатку прошлого месяца ({formatRubles(state.previousMonthRemainder)})
-                </span>
-              </div>
-            </div>
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={() => receiveSalary()}
-              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer whitespace-nowrap"
+              id="tour-budget-manual-btn"
+              onClick={() => {
+                setManualBalanceInput(totalCheckingBankBalance > 0 ? String(totalCheckingBankBalance) : '');
+                setIsManualBalanceOpen(true);
+              }}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[var(--color-bg-card-subtle)] hover:bg-[var(--color-bg-card-muted)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-main)] border border-[var(--color-border)] transition-all text-xs font-semibold shadow-xs active:scale-95 cursor-pointer"
+              title="Указать или изменить баланс карты"
             >
-              Учесть зарплату ({formatRubles(state.currentSalary)})
+              <Pencil className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+              <span>{hasCardBalance ? 'Изменить' : 'Указать баланс'}</span>
+            </button>
+            <button
+              onClick={() => setIsEditBudgetOpen(true)}
+              className="p-1.5 rounded-xl bg-[var(--color-bg-card-subtle)] hover:bg-[var(--color-bg-card-muted)] text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] border border-[var(--color-border)] transition-all text-xs font-semibold shadow-xs cursor-pointer"
+              title="Параметры бюджета"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
             </button>
           </div>
-        )}
+        </div>
 
-        {/* Budget details breakdown */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 py-2.5 px-3 mb-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] text-xs">
+        <div id="tour-budget-balance" className="mb-3">
+          {hasCardBalance ? (
+            <div className="space-y-1.5">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <div className="text-3xl sm:text-4xl font-extrabold text-[var(--color-text-main)] tracking-tight">
+                  {formatRubles(totalCheckingBankBalance, { showCents: false })}
+                </div>
+                {!isAdvanceDateReached && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/40">
+                    + {formatRubles(effectiveAdvanceAmount, { showCents: false })} аванс
+                  </span>
+                )}
+              </div>
+              {!isAdvanceDateReached ? (
+                <p className="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1.5 flex-wrap">
+                  <span className="font-medium text-[var(--color-text-secondary)]">
+                    Всего до зарплаты с авансом: {formatRubles(totalFundsWithAdvance, { showCents: false })}
+                  </span>
+                  <span>•</span>
+                  <span>Аванс {actualAdvanceDay}-го числа</span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                  ✓ Фактический аванс учтён в балансе карты
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="py-3 px-4 my-2.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40 flex flex-col gap-2.5">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Wallet className="w-4 h-4" />
+                </div>
+                <div className="space-y-0.5">
+                  <h3 className="text-xs font-bold text-gray-900 dark:text-white">
+                    Укажите баланс карты
+                  </h3>
+                  <p className="text-[11px] text-gray-600 dark:text-gray-300 leading-snug">
+                    Для точного расчета дневной нормы и лимита до зарплаты укажите реальный остаток на вашей карте.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={() => {
+                    setManualBalanceInput('');
+                    setIsManualBalanceOpen(true);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Указать вручную</span>
+                </button>
+                <button
+                  onClick={() => setIsBankModalOpen(true)}
+                  className="px-2.5 py-1.5 rounded-lg bg-[var(--color-bg-card)] hover:bg-[var(--color-bg-card-subtle)] text-[var(--color-text-main)] border border-[var(--color-border)] text-xs font-semibold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                  <span>Синхронизировать</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Budget details breakdown: 5-column grid including Salary and Advance counters */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 py-2.5 px-3 mb-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] text-xs">
           <div>
             <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">Зарплата</span>
-            <span className={`font-bold truncate block ${!state.isSalaryReceived ? 'text-amber-600 dark:text-amber-400' : 'text-[var(--color-text-main)]'}`}>
-              {!state.isSalaryReceived ? `Ожид. (${formatRubles(state.currentSalary, { showCents: false })})` : formatRubles(state.actualSalaryAmount || state.currentSalary, { showCents: false })}
-            </span>
-          </div>
-          <div>
-            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">Подушка (10%)</span>
             <span className="font-bold text-[var(--color-text-main)] truncate block">
-              {!state.isSalaryReceived ? '0 ₽ (при з/п)' : formatRubles(state.safetyCushionDeposit, { showCents: false })}
+              {formatRubles(state.currentSalary, { showCents: false })}
+            </span>
+            <span className="text-[9px] text-[var(--color-text-muted)] block truncate">
+              {state.salaryDateDay || 5}-е число
             </span>
           </div>
+
           <div>
-            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">Остаток прошл.</span>
-            <span className="font-bold text-emerald-600 dark:text-emerald-400 truncate block">
-              {formatRubles(state.previousMonthRemainder, { showCents: false })}
+            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">
+              {isAdvanceDateReached ? 'Фактический аванс' : 'Прогнозируемый аванс'}
+            </span>
+            <span className={`font-bold truncate block ${isAdvanceDateReached ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-400'}`}>
+              {formatRubles(effectiveAdvanceAmount, { showCents: false })}
+            </span>
+            <span className="text-[9px] text-[var(--color-text-muted)] block truncate">
+              {isAdvanceDateReached ? 'Учтён в балансе' : `${actualAdvanceDay}-е ч. (ожид.)`}
             </span>
           </div>
+
+          <div>
+            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">
+              Подушка
+            </span>
+            <span className="font-bold text-[var(--color-text-main)] truncate block">
+              {formatRubles(cushionMonthlyDeposit, { showCents: false })}
+            </span>
+            <span className="text-[9px] text-[var(--color-text-muted)] block truncate">
+              В резерв
+            </span>
+          </div>
+
+          <div>
+            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">Остаток планов</span>
+            <span className="font-bold text-[var(--color-text-main)] truncate block">
+              {formatRubles(unreachedPlannedExpenses, { showCents: false })}
+            </span>
+            <span className="text-[9px] text-[var(--color-text-muted)] block truncate">
+              К оплате
+            </span>
+          </div>
+
           <div>
             <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">Доп. доходы</span>
             <span className="font-bold text-emerald-600 dark:text-emerald-400 truncate block">
               +{formatRubles(totalIncludedAdditionalIncomes, { showCents: false })}
+            </span>
+            <span className="text-[9px] text-[var(--color-text-muted)] block truncate">
+              Поступления
             </span>
           </div>
         </div>
@@ -247,13 +389,19 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
           <div>
             <span className="text-xs text-[var(--color-text-muted)] block font-medium">Чистый остаток на прочее</span>
             <span className="text-lg font-bold text-[var(--color-accent)]">
-              {formatRubles(freeDiscretionaryBudget, { showCents: false })}
+              {hasCardBalance ? formatRubles(realDiscretionaryRemainder, { showCents: false }) : '—'}
+            </span>
+            <span className="text-[10px] text-[var(--color-text-muted)] block mt-0.5">
+              {hasCardBalance ? (!isAdvanceDateReached ? 'С учётом аванса минус планы и подушка' : 'Баланс карты минус планы и подушка') : 'Укажите баланс карты'}
             </span>
           </div>
           <div>
             <span className="text-xs text-[var(--color-text-muted)] block font-medium">Дней до зарплаты</span>
             <span className="text-lg font-bold text-[var(--color-text-main)]">
               {daysToSalary} дн.
+            </span>
+            <span className="text-[10px] text-[var(--color-text-muted)] block mt-0.5">
+              До {state.periodEndDate ? formatShortDate(state.periodEndDate) : 'конца периода'}
             </span>
           </div>
         </div>
@@ -266,17 +414,27 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
             ДОПУСТИМО СЕГОДНЯ
           </span>
           <div className="text-2xl font-extrabold text-[var(--color-text-main)]">
-            {formatRubles(todayAllowedSpend, { showCents: false })}
+            {hasCardBalance ? formatRubles(todayAllowedSpend, { showCents: false }) : '—'}
           </div>
+          {!hasCardBalance && (
+            <span className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 block">
+              Требуется баланс карты
+            </span>
+          )}
         </div>
 
         <div className="bg-[var(--color-bg-card)] rounded-2xl p-4 shadow-xs border border-[var(--color-border)]">
           <span className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1">
-            ЛИМИТ ДНЯ (E1)
+            БАЗОВАЯ НОРМА В ДЕНЬ
           </span>
           <div className="text-2xl font-extrabold text-[var(--color-accent)]">
-            {formatRubles(baseDailyNorm, { showCents: false })}
+            {hasCardBalance ? formatRubles(baseDailyNorm, { showCents: false }) : '—'}
           </div>
+          {!hasCardBalance && (
+            <span className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 block">
+              Остаток ÷ {daysToSalary} дн.
+            </span>
+          )}
         </div>
       </div>
 
@@ -680,6 +838,116 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
         isOpen={isBankModalOpen}
         onClose={() => setIsBankModalOpen(false)}
       />
+
+      {/* Manual Card Balance Input Modal */}
+      <AnimatePresence>
+        {isManualBalanceOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[var(--color-bg-card)] rounded-2xl p-5 max-w-sm w-full border border-[var(--color-border)] shadow-xl space-y-4"
+            >
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-bold text-[var(--color-text-main)] flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>Баланс дебетовой карты</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsManualBalanceOpen(false)}
+                  className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] rounded-lg cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+                Введите фактический остаток на вашей карте. От него рассчитывается ваш реальный чистый остаток и дневной лимит.
+              </p>
+
+              <form onSubmit={handleSaveManualBalance} className="space-y-3">
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Например, 45 000.50"
+                    value={manualBalanceInput}
+                    onChange={(e) => setManualBalanceInput(e.target.value)}
+                    autoFocus
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] text-[var(--color-text-main)] text-lg font-bold focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-[var(--color-text-muted)]">
+                    ₽
+                  </span>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsManualBalanceOpen(false)}
+                    className="flex-1 py-2 rounded-xl border border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-card-subtle)] cursor-pointer"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                  >
+                    Сохранить
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* New Period Unlocked Modal */}
+      <AnimatePresence>
+        {newPeriodModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[var(--color-bg-card)] rounded-2xl p-5 max-w-sm w-full border border-[var(--color-border)] shadow-xl space-y-4 text-center"
+            >
+              <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-[var(--color-text-main)]">
+                  Новый расчетный период открыт!
+                </h3>
+                <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+                  Зарплата зачислена в бюджет. Теперь вы можете спланировать расходы и покупки на новый месяц вперед, а также спрогнозировать дату и размер аванса.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewPeriodModalOpen(false);
+                    setActiveTab('planning');
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                >
+                  Спланировать на месяц вперёд
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewPeriodModalOpen(false)}
+                  className="w-full py-2 px-4 rounded-xl bg-[var(--color-bg-card-subtle)] hover:bg-[var(--color-bg-card-muted)] text-[var(--color-text-main)] border border-[var(--color-border)] font-semibold text-xs transition-colors cursor-pointer"
+                >
+                  Остаться в разделе «Бюджет»
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

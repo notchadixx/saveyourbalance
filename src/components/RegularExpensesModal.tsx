@@ -102,7 +102,7 @@ export const RegularExpensesModal: React.FC<RegularExpensesModalProps> = ({ isOp
   };
 
   const handleSaveEdit = (id: string) => {
-    const parsedAmount = parseFloat(editAmount);
+    const parsedAmount = parseFloat(editAmount.replace(/\s+/g, '').replace(',', '.'));
     const parsedDay = parseInt(editDay, 10);
 
     if (!isNaN(parsedAmount) && parsedAmount > 0) {
@@ -282,8 +282,8 @@ export const RegularExpensesModal: React.FC<RegularExpensesModalProps> = ({ isOp
                         Сумма (₽)
                       </label>
                       <input
-                        type="number"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         required
                         value={manualAmount}
                         onChange={(e) => setManualAmount(e.target.value)}
@@ -379,7 +379,8 @@ export const RegularExpensesModal: React.FC<RegularExpensesModalProps> = ({ isOp
                                   Сумма (₽)
                                 </label>
                                 <input
-                                  type="number"
+                                  type="text"
+                                  inputMode="decimal"
                                   value={editAmount}
                                   onChange={(e) => setEditAmount(e.target.value)}
                                   className="w-full text-xs px-2 py-1 rounded-lg border border-blue-300 dark:border-blue-700 bg-[var(--color-input-bg)] text-[var(--color-text-main)] font-bold"

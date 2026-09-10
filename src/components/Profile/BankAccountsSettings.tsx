@@ -43,7 +43,7 @@ export const BankAccountsSettings: React.FC<BankAccountsSettingsProps> = ({ onBa
   };
 
   const handleSaveEdit = (id: string) => {
-    const b = parseFloat(editBalance);
+    const b = parseFloat(editBalance.replace(/\s+/g, '').replace(',', '.'));
     if (!isNaN(b)) {
       updateBankAccountBalance(id, b);
       showToast('Баланс счета обновлен');
@@ -53,7 +53,7 @@ export const BankAccountsSettings: React.FC<BankAccountsSettingsProps> = ({ onBa
 
   const handleSyncAll = async () => {
     await syncBankAccounts();
-    showToast('Счета успешно синхронизированы с банками');
+    showToast('Время сверки счетов обновлено');
   };
 
   return (
@@ -77,7 +77,7 @@ export const BankAccountsSettings: React.FC<BankAccountsSettingsProps> = ({ onBa
               className="p-2 sm:px-3 sm:py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-bold flex items-center gap-1.5 hover:bg-blue-500/20 transition-all disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isBankSyncing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Синхронизировать</span>
+              <span className="hidden sm:inline">Обновить время</span>
             </button>
 
             <button
@@ -85,7 +85,7 @@ export const BankAccountsSettings: React.FC<BankAccountsSettingsProps> = ({ onBa
               className="p-2 sm:px-3 sm:py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5 hover:bg-emerald-500/20 transition-all"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Подключить банк</span>
+              <span>Добавить счет / карту</span>
             </button>
           </div>
         </div>
@@ -164,7 +164,8 @@ export const BankAccountsSettings: React.FC<BankAccountsSettingsProps> = ({ onBa
                   {isEditing ? (
                     <div className="flex items-center gap-2">
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={editBalance}
                         onChange={(e) => setEditBalance(e.target.value)}
                         className="w-28 px-2 py-1 rounded-lg bg-[var(--color-bg-card-subtle)] border text-xs font-bold"

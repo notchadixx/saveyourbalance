@@ -74,8 +74,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
             </label>
             <div className="relative">
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 required
                 autoFocus
                 placeholder="0.00"

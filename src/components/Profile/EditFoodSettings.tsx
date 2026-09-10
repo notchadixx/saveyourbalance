@@ -69,8 +69,8 @@ export const EditFoodSettings: React.FC<EditFoodSettingsProps> = ({ onBack, show
   };
 
   const handleSaveLimits = () => {
-    const numLimit = parseFloat(simpleLimit) || 20000;
-    const numDisc = parseFloat(discretionaryLimit) || 5000;
+    const numLimit = parseFloat(simpleLimit.replace(/\s+/g, '').replace(',', '.')) || 20000;
+    const numDisc = parseFloat(discretionaryLimit.replace(/\s+/g, '').replace(',', '.')) || 5000;
     
     updateFoodLimit(numLimit);
     if (foodControl.mode === 'hybrid') {
@@ -86,8 +86,8 @@ export const EditFoodSettings: React.FC<EditFoodSettingsProps> = ({ onBack, show
 
     addBasketItem({
       name: newItemName.trim(),
-      price: parseFloat(newItemPrice) || 0,
-      quantityPerMonth: parseFloat(newItemQty) || 1,
+      price: parseFloat(newItemPrice.replace(/\s+/g, '').replace(',', '.')) || 0,
+      quantityPerMonth: parseFloat(newItemQty.replace(/\s+/g, '').replace(',', '.')) || 1,
       unit: newItemUnit,
       category: newItemCategory,
     });
@@ -106,8 +106,8 @@ export const EditFoodSettings: React.FC<EditFoodSettingsProps> = ({ onBack, show
   };
 
   const handleSaveEdit = (id: string) => {
-    const p = parseFloat(editPrice);
-    const q = parseFloat(editQty);
+    const p = parseFloat(editPrice.replace(/\s+/g, '').replace(',', '.'));
+    const q = parseFloat(editQty.replace(/\s+/g, '').replace(',', '.'));
     if (!isNaN(p) && !isNaN(q)) {
       updateBasketItem(id, {
         price: p,
@@ -191,7 +191,8 @@ export const EditFoodSettings: React.FC<EditFoodSettingsProps> = ({ onBack, show
           </label>
           <div className="relative">
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               value={simpleLimit}
               onChange={(e) => setSimpleLimit(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] text-sm font-bold text-[var(--color-text-main)] focus:outline-hidden focus:border-[var(--color-accent)]"
@@ -217,7 +218,8 @@ export const EditFoodSettings: React.FC<EditFoodSettingsProps> = ({ onBack, show
           </label>
           <div className="relative">
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               value={discretionaryLimit}
               onChange={(e) => setDiscretionaryLimit(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] text-sm font-bold text-[var(--color-text-main)] focus:outline-hidden focus:border-[var(--color-accent)]"
@@ -299,7 +301,8 @@ export const EditFoodSettings: React.FC<EditFoodSettingsProps> = ({ onBack, show
 
               <div className="grid grid-cols-3 gap-2">
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="Цена (₽)"
                   value={newItemPrice}
                   onChange={(e) => setNewItemPrice(e.target.value)}
@@ -307,7 +310,8 @@ export const EditFoodSettings: React.FC<EditFoodSettingsProps> = ({ onBack, show
                   required
                 />
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="Кол-во в мес"
                   value={newItemQty}
                   onChange={(e) => setNewItemQty(e.target.value)}
@@ -360,7 +364,8 @@ export const EditFoodSettings: React.FC<EditFoodSettingsProps> = ({ onBack, show
                           {item.name}
                         </span>
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="decimal"
                           value={editPrice}
                           onChange={(e) => setEditPrice(e.target.value)}
                           className="w-16 px-2 py-1 rounded bg-[var(--color-bg-card-subtle)] border text-xs"
@@ -368,7 +373,8 @@ export const EditFoodSettings: React.FC<EditFoodSettingsProps> = ({ onBack, show
                         />
                         <span className="text-[var(--color-text-muted)]">×</span>
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="decimal"
                           value={editQty}
                           onChange={(e) => setEditQty(e.target.value)}
                           className="w-12 px-2 py-1 rounded bg-[var(--color-bg-card-subtle)] border text-xs"

@@ -61,7 +61,7 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
   const [fullEditId, setFullEditId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState<string>('');
   const [editAmount, setEditAmount] = useState<string>('');
-  const [editCategory, setEditCategory] = useState<string>('покупки');
+  const [editCategory, setEditCategory] = useState<PlannedItem['category']>('покупки');
   const [editNotes, setEditNotes] = useState<string>('');
   const [editSpentAmount, setEditSpentAmount] = useState<string>('0');
   const [editIsProgressTracked, setEditIsProgressTracked] = useState<boolean>(false);
@@ -147,7 +147,7 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
       title: editTitle.trim() || 'Статья расхода',
       amount: parsedAmount,
       spentAmount: !isNaN(parsedSpent) && parsedSpent >= 0 ? parsedSpent : 0,
-      category: editCategory as any,
+      category: editCategory,
       notes: editNotes.trim(),
       isProgressTracked: editIsProgressTracked,
       typicalDay: parsedDay && parsedDay >= 1 && parsedDay <= 31 ? parsedDay : undefined,
@@ -221,6 +221,7 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
     <div className="flex flex-col gap-4 pb-28 pt-2">
       {/* 1. Header Overview Cards */}
       <motion.div 
+        id="tour-plans-summary"
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-[var(--color-bg-card)] rounded-2xl p-5 shadow-xs border border-[var(--color-border)]"
@@ -365,79 +366,81 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
       </div>
 
       {/* 4. Category Filter & Add Item */}
-      <div className="flex flex-col gap-2">
-        <div className="flex justify-between items-center px-1 flex-wrap gap-2">
-          <h3 className="text-base font-bold text-[var(--color-text-main)]">
-            {activePeriodTab === 'current' && 'Статьи текущего месяца'}
-            {activePeriodTab === 'next' && 'Перенесенные на следующий месяц'}
-            {activePeriodTab === 'future' && 'Отложенные статьи'}
-            {activePeriodTab === 'previous' && 'Архив планов предыдущего месяца'}
-            {activePeriodTab === 'all' && 'Все активные статьи'} ({filteredItems.length})
-          </h3>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => setIsMarketplaceModalOpen(true)}
-              className="flex items-center gap-1.5 text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-900/50 px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
-              title="Синхронизация с маркетплейсами Wildberries и OZON"
-            >
-              <ShoppingBag className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-              <span>WB / OZON</span>
-            </button>
+      <div id="tour-plans-list-container" className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex justify-between items-center px-1 flex-wrap gap-2">
+            <h3 className="text-base font-bold text-[var(--color-text-main)]">
+              {activePeriodTab === 'current' && 'Статьи текущего месяца'}
+              {activePeriodTab === 'next' && 'Перенесенные на следующий месяц'}
+              {activePeriodTab === 'future' && 'Отложенные статьи'}
+              {activePeriodTab === 'previous' && 'Архив планов предыдущего месяца'}
+              {activePeriodTab === 'all' && 'Все активные статьи'} ({filteredItems.length})
+            </h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setIsMarketplaceModalOpen(true)}
+                className="flex items-center gap-1.5 text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-900/50 px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+                title="Синхронизация с маркетплейсами Wildberries и OZON"
+              >
+                <ShoppingBag className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                <span>WB / OZON</span>
+              </button>
 
-            <button
-              onClick={() => setIsFoodBasketModalOpen(true)}
-              className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-900/50 px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
-              title="Настройка продуктовой корзины и лимитов"
-            >
-              <ShoppingBasket className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>Корзина продуктов</span>
-            </button>
+              <button
+                onClick={() => setIsFoodBasketModalOpen(true)}
+                className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-900/50 px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+                title="Настройка продуктовой корзины и лимитов"
+              >
+                <ShoppingBasket className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Корзина продуктов</span>
+              </button>
 
-            <button
-              onClick={() => setIsRegularExpensesModalOpen(true)}
-              className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-900/50 px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>ИИ Анализ расходов</span>
-            </button>
+              <button
+                onClick={() => setIsRegularExpensesModalOpen(true)}
+                className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-900/50 px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>ИИ Анализ расходов</span>
+              </button>
 
-            <button
-              onClick={onOpenAddPlanned}
-              className="flex items-center gap-1 text-xs font-bold text-white bg-[#041627] dark:bg-[#10b981] dark:text-[#041627] hover:bg-[#1a2b3c] dark:hover:bg-[#059669] px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Добавить статью</span>
-            </button>
+              <button
+                id="tour-plans-add-btn"
+                onClick={onOpenAddPlanned}
+                className="flex items-center gap-1 text-xs font-bold text-white bg-[#041627] dark:bg-[#10b981] dark:text-[#041627] hover:bg-[#1a2b3c] dark:hover:bg-[#059669] px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Добавить статью</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Categories chips */}
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
+            {[
+              { id: 'all', label: 'Все' },
+              { id: 'покупки', label: 'Покупки' },
+              { id: 'авто', label: 'Авто & Бензин' },
+              { id: 'игры_хобби', label: 'Игры & Хобби' },
+              { id: 'обязательные', label: 'Обязательные' },
+              { id: 'мероприятия', label: 'Мероприятия' },
+            ].map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => setFilterCategory(cat.id)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  filterCategory === cat.id
+                    ? 'bg-[#041627] dark:bg-[#10b981] text-white dark:text-[#041627] shadow-xs'
+                    : 'bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:border-[var(--color-border-strong)]'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Categories chips */}
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
-          {[
-            { id: 'all', label: 'Все' },
-            { id: 'покупки', label: 'Покупки' },
-            { id: 'авто', label: 'Авто & Бензин' },
-            { id: 'игры_хобби', label: 'Игры & Хобби' },
-            { id: 'обязательные', label: 'Обязательные' },
-            { id: 'мероприятия', label: 'Мероприятия' },
-          ].map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => setFilterCategory(cat.id)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                filterCategory === cat.id
-                  ? 'bg-[#041627] dark:bg-[#10b981] text-white dark:text-[#041627] shadow-xs'
-                  : 'bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:border-[var(--color-border-strong)]'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 5. Planned Items List */}
-      <div className="flex flex-col gap-2.5">
+        {/* 5. Planned Items List */}
+        <div id="tour-plans-list" className="flex flex-col gap-2.5">
         {filteredItems.length === 0 ? (
           <div className="text-center py-12 px-4 rounded-2xl bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-muted)] flex flex-col items-center gap-2">
             <Calendar className="w-8 h-8 opacity-40 text-[var(--color-text-muted)]" />
@@ -493,7 +496,7 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
                         required
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
-                        placeholder="Напр. Бенз, DDX Fitness, МФУ"
+                        placeholder="Напр. Бензин, Фитнес, Техника"
                         className="w-full h-8 px-2.5 bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg text-xs font-bold text-[var(--color-text-main)]"
                       />
                     </div>
@@ -502,8 +505,8 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
                         Плановый лимит / сумма, ₽
                       </label>
                       <input
-                        type="number"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         required
                         value={editAmount}
                         onChange={(e) => setEditAmount(e.target.value)}
@@ -521,14 +524,13 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
                           Фактически потрачено (Факт / заправки), ₽
                         </label>
                         <span className="text-[10px] text-[var(--color-text-muted)]">
-                          Останется лимит: {formatRubles(Math.max(0, (parseFloat(editAmount) || 0) - (parseFloat(editSpentAmount) || 0)))}
+                          Останется лимит: {formatRubles(Math.max(0, (parseFloat(editAmount.replace(/\s+/g, '').replace(',', '.')) || 0) - (parseFloat(editSpentAmount.replace(/\s+/g, '').replace(',', '.')) || 0)))}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <input
-                          type="number"
-                          step="0.01"
-                          min="0"
+                          type="text"
+                          inputMode="decimal"
                           value={editSpentAmount}
                           onChange={(e) => setEditSpentAmount(e.target.value)}
                           placeholder="12000"
@@ -540,7 +542,7 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
                               type="button"
                               key={val}
                               onClick={() => {
-                                const curr = parseFloat(editSpentAmount) || 0;
+                                const curr = parseFloat(editSpentAmount.replace(/\s+/g, '').replace(',', '.')) || 0;
                                 setEditSpentAmount((curr + val).toString());
                               }}
                               className="px-1.5 py-1 text-[10px] font-semibold bg-[var(--color-bg-card)] border border-[var(--color-border)] hover:bg-[var(--color-bg-card-muted)] rounded-lg cursor-pointer text-[var(--color-text-secondary)]"
@@ -749,7 +751,8 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
                         {editingItemId === item.id ? (
                           <div className="flex items-center gap-1">
                             <input
-                              type="number"
+                              type="text"
+                              inputMode="decimal"
                               value={editSpentVal}
                               onChange={(e) => setEditSpentVal(e.target.value)}
                               className="w-24 px-2 py-0.5 text-xs font-bold bg-[var(--color-bg-card)] border border-[var(--color-accent)] rounded-lg text-[var(--color-text-main)]"
@@ -1075,6 +1078,7 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
             );
           })
         )}
+      </div>
       </div>
 
       <RegularExpensesModal

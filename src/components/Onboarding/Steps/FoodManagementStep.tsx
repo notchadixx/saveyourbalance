@@ -294,7 +294,8 @@ export const FoodManagementStep: React.FC<Props> = ({ onNext }) => {
             Месячный лимит на категорию «Продукты» (₽):
           </label>
           <input
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={monthlyLimitInput}
             onChange={(e) => setMonthlyLimitInput(e.target.value)}
             className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:outline-hidden"
@@ -353,15 +354,16 @@ export const FoodManagementStep: React.FC<Props> = ({ onNext }) => {
               />
               <div className="grid grid-cols-3 gap-2">
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="Цена (₽)"
                   value={customPrice}
                   onChange={(e) => setCustomPrice(e.target.value)}
                   className="px-2 py-1.5 bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-lg text-xs font-bold"
                 />
                 <input
-                  type="number"
-                  step="0.5"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="Кол-во"
                   value={customQty}
                   onChange={(e) => setCustomQty(e.target.value)}
@@ -411,7 +413,8 @@ export const FoodManagementStep: React.FC<Props> = ({ onNext }) => {
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={item.price}
                       onChange={(e) => handleUpdateItemPrice(item.id, e.target.value)}
                       className="w-14 px-1.5 py-0.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded text-[11px] font-bold text-right"
@@ -419,8 +422,8 @@ export const FoodManagementStep: React.FC<Props> = ({ onNext }) => {
                     />
                     <span className="text-[10px] text-gray-500">₽ ×</span>
                     <input
-                      type="number"
-                      step="0.5"
+                      type="text"
+                      inputMode="decimal"
                       value={item.quantityPerMonth}
                       onChange={(e) => handleUpdateItemQty(item.id, e.target.value)}
                       className="w-10 px-1 py-0.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded text-[11px] font-bold text-center"
@@ -450,7 +453,8 @@ export const FoodManagementStep: React.FC<Props> = ({ onNext }) => {
               </label>
               <div className="flex items-center gap-2">
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={discretionaryLimitInput}
                   onChange={(e) => setDiscretionaryLimitInput(e.target.value)}
                   className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-purple-300 dark:border-purple-800 rounded-xl text-xs font-bold text-gray-900 dark:text-white"

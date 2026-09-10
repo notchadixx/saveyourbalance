@@ -75,7 +75,7 @@ export const AddPlannedModal: React.FC<AddPlannedModalProps> = ({ isOpen, onClos
               type="text"
               required
               autoFocus
-              placeholder="Напр. МФУ, Бензин, Подарок"
+              placeholder="Напр. Техника, Бензин, Подарок"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full text-xs font-semibold text-[var(--color-text-main)] bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
@@ -88,8 +88,8 @@ export const AddPlannedModal: React.FC<AddPlannedModalProps> = ({ isOpen, onClos
                 Сумма (₽)
               </label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 required
                 placeholder="5 000"
                 value={amount}
@@ -104,7 +104,7 @@ export const AddPlannedModal: React.FC<AddPlannedModalProps> = ({ isOpen, onClos
               </label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as any)}
+                onChange={(e) => setCategory(e.target.value as PlannedItem['category'])}
                 className="w-full text-xs font-semibold text-[var(--color-text-main)] bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
               >
                 <option value="покупки">Покупки</option>
@@ -177,8 +177,8 @@ export const AddPlannedModal: React.FC<AddPlannedModalProps> = ({ isOpen, onClos
                   Уже потрачено из плана (₽)
                 </label>
                 <input
-                  type="number"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0"
                   value={initialSpent}
                   onChange={(e) => setInitialSpent(e.target.value)}

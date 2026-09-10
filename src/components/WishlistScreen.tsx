@@ -273,8 +273,8 @@ export const WishlistScreen: React.FC<WishlistScreenProps> = ({ onOpenAddWishlis
                         Цена, ₽
                       </label>
                       <input
-                        type="number"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         required
                         value={editPrice}
                         onChange={(e) => setEditPrice(e.target.value)}
@@ -290,7 +290,7 @@ export const WishlistScreen: React.FC<WishlistScreenProps> = ({ onOpenAddWishlis
                       </label>
                       <select
                         value={editMarketplace}
-                        onChange={(e) => setEditMarketplace(e.target.value as any)}
+                        onChange={(e) => setEditMarketplace(e.target.value as Marketplace)}
                         className="w-full h-8 px-2 bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg text-xs font-semibold text-[var(--color-text-main)]"
                       >
                         <option value="ozon">OZON</option>

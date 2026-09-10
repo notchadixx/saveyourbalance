@@ -66,7 +66,7 @@ export const AddWishlistModal: React.FC<AddWishlistModalProps> = ({ isOpen, onCl
               type="text"
               required
               autoFocus
-              placeholder="Напр. Смарт-часы Huawei GT 4"
+              placeholder="Напр. Смарт-часы или монитор"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full text-xs font-semibold text-[var(--color-text-main)] bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
@@ -79,8 +79,8 @@ export const AddWishlistModal: React.FC<AddWishlistModalProps> = ({ isOpen, onCl
                 Цена (₽)
               </label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 required
                 placeholder="12 799"
                 value={price}
@@ -127,7 +127,7 @@ export const AddWishlistModal: React.FC<AddWishlistModalProps> = ({ isOpen, onCl
               </label>
               <select
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as any)}
+                onChange={(e) => setPriority(e.target.value as 'high' | 'medium' | 'low')}
                 className="w-full text-xs font-semibold text-[var(--color-text-main)] bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
               >
                 <option value="high">Высокий 🔥</option>

@@ -226,7 +226,7 @@ export const BudgetIncomeSection: React.FC = () => {
                   Все входящие транзакции обработаны
                 </p>
                 <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
-                  Новые поступления с карт Т-Банка, Сбера и СБП появятся здесь при синхронизации.
+                  Новые поступления с карт Т-Банка, Сбера и СБП появятся здесь при разборе уведомлений или ручном добавлении.
                 </p>
               </div>
               <div className="flex gap-2 mt-2">
@@ -236,7 +236,7 @@ export const BudgetIncomeSection: React.FC = () => {
                   className="px-3 py-1.5 bg-[var(--color-bg-card)] hover:bg-[var(--color-bg-card-muted)] text-[var(--color-text-main)] border border-[var(--color-border)] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isBankSyncing ? 'animate-spin' : ''}`} />
-                  <span>{isBankSyncing ? 'Синхронизация...' : 'Проверить банк'}</span>
+                  <span>{isBankSyncing ? 'Обновление...' : 'Обновить'}</span>
                 </button>
                 <button
                   onClick={() => handleOpenAddManual('cash')}

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { BudgetProvider, useBudget } from './context/BudgetContext';
 import { ProfileProvider, useProfile } from './context/ProfileContext';
+import { CLOUD_SYNC_ENABLED } from './config';
 import { OnboardingFlow } from './components/Onboarding/OnboardingFlow';
 import { TopBar, BottomNavBar } from './components/Navigation';
 import { TodayScreen } from './components/TodayScreen';
@@ -15,13 +16,27 @@ import { AddExpenseModal } from './components/AddExpenseModal';
 import { AddWishlistModal } from './components/AddWishlistModal';
 import { AddPlannedModal } from './components/AddPlannedModal';
 import { DeviceFrame } from './components/DeviceFrame';
+import { OnboardingTour } from './components/Onboarding/OnboardingTour';
 
 function AppContent() {
   const { activeTab } = useBudget();
-  const { isOnboardingComplete } = useProfile();
+  const { isOnboardingComplete, isProfileLoading } = useProfile();
+  const { loading: authLoading } = useAuth();
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [isAddWishlistOpen, setIsAddWishlistOpen] = useState(false);
   const [isAddPlannedOpen, setIsAddPlannedOpen] = useState(false);
+
+  // Пока проверяется авторизация или загружается профиль из Firestore для залогиненного пользователя (только при включенной облачной синхронизации)
+  if (CLOUD_SYNC_ENABLED && !isOnboardingComplete && (authLoading || isProfileLoading)) {
+    return (
+      <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Синхронизация профиля...</span>
+        </div>
+      </div>
+    );
+  }
 
   // Если онбординг не пройден – показываем его
   if (!isOnboardingComplete) {
@@ -72,6 +87,8 @@ function AppContent() {
       </main>
 
       <BottomNavBar />
+
+      <OnboardingTour />
 
       <AddExpenseModal
         isOpen={isAddExpenseOpen}

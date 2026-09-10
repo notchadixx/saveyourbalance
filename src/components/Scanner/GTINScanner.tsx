@@ -97,8 +97,7 @@ export const GTINScanner: React.FC<GTINScannerProps> = ({
             // Ошибки каждого кадра игнорируем
           }
         );
-      } catch (err: any) {
-        console.warn('Camera scanner init failed:', err);
+      } catch (err: unknown) {
         setScannerError(
           'Не удалось получить доступ к камере (возможно, нет разрешений или заблокировано в iFrame). Вы можете ввести GTIN вручную.'
         );
@@ -114,8 +113,8 @@ export const GTINScanner: React.FC<GTINScannerProps> = ({
           await scannerRef.current.stop();
         }
         scannerRef.current.clear();
-      } catch (e) {
-        console.warn('Error stopping scanner:', e);
+      } catch {
+        // Ошибки при остановке сканера игнорируем
       }
       scannerRef.current = null;
     }
@@ -154,8 +153,8 @@ export const GTINScanner: React.FC<GTINScannerProps> = ({
   };
 
   const handleConfirmAdd = () => {
-    const priceNum = parseFloat(prodPrice.replace(',', '.'));
-    const qtyNum = parseFloat(prodQuantity.replace(',', '.'));
+    const priceNum = parseFloat(prodPrice.replace(/\s+/g, '').replace(',', '.'));
+    const qtyNum = parseFloat(prodQuantity.replace(/\s+/g, '').replace(',', '.'));
 
     if (isNaN(priceNum) || priceNum <= 0) {
       alert('Пожалуйста, укажите корректную цену за единицу товара');
@@ -325,7 +324,7 @@ export const GTINScanner: React.FC<GTINScannerProps> = ({
                     </label>
                     <select
                       value={prodCategory}
-                      onChange={(e) => setProdCategory(e.target.value as any)}
+                      onChange={(e) => setProdCategory(e.target.value as FoodItem['category'])}
                       className="w-full px-2 py-1.5 bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg text-xs font-semibold text-[var(--color-text-main)]"
                     >
                       <option value="молочка">🥛 Молочка</option>
@@ -356,9 +355,8 @@ export const GTINScanner: React.FC<GTINScannerProps> = ({
                       Цена (₽)
                     </label>
                     <input
-                      type="number"
-                      min="1"
-                      step="1"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="120"
                       value={prodPrice}
                       onChange={(e) => setProdPrice(e.target.value)}
@@ -372,9 +370,8 @@ export const GTINScanner: React.FC<GTINScannerProps> = ({
                       Кол-во в мес
                     </label>
                     <input
-                      type="number"
-                      min="0.5"
-                      step="0.5"
+                      type="text"
+                      inputMode="decimal"
                       value={prodQuantity}
                       onChange={(e) => setProdQuantity(e.target.value)}
                       className="w-full px-2 py-1.5 bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg text-xs font-bold text-[var(--color-text-main)] focus:outline-hidden"

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { CLOUD_SYNC_ENABLED } from '../config';
 import { 
   auth, 
   googleProvider, 
@@ -14,23 +15,37 @@ import {
   User 
 } from '../lib/firebase';
 
+interface FirebaseAuthErrorLike {
+  code?: string;
+  message?: string;
+}
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: string | null;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  logout: () => Promise<void>;
   clearError: () => void;
+  authTimedOut?: boolean;
+  retryAuth?: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(CLOUD_SYNC_ENABLED);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // If cloud sync is disabled, do not touch Firebase Auth at all
+    if (!CLOUD_SYNC_ENABLED) {
+      setLoading(false);
+      return;
+    }
+
     // Check redirect result if redirected
     getRedirectResult(auth)
       .then(async (result) => {
@@ -45,12 +60,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               lastLoginAt: serverTimestamp(),
             }, { merge: true });
           } catch (e) {
-            console.warn('Could not sync redirect user profile to firestore:', e);
+            console.error('Failed to sync redirect user profile to firestore:', e);
           }
         }
       })
       .catch((err) => {
-        console.warn('Redirect sign-in error:', err);
+        console.error('Redirect sign-in error:', err);
       });
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -65,7 +80,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             lastSeenAt: serverTimestamp(),
           }, { merge: true });
         } catch (e) {
-          console.warn('Could not sync user profile to firestore:', e);
+          console.error('Failed to sync user profile to firestore:', e);
         }
       }
       setLoading(false);
@@ -75,6 +90,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signInWithGoogle = async () => {
+    if (!CLOUD_SYNC_ENABLED) {
+      return;
+    }
     setError(null);
     try {
       const result = await signInWithPopup(auth, googleProvider);
@@ -88,35 +106,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             lastLoginAt: serverTimestamp(),
           }, { merge: true });
         } catch (e) {
-          console.warn('Could not sync signed-in user profile to firestore:', e);
+          console.error('Failed to sync signed-in user profile to firestore:', e);
         }
       }
-    } catch (err: any) {
-      console.warn('Popup login failed, attempting redirect fallback:', err);
-      if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
+    } catch (err: unknown) {
+      const authErr = err as FirebaseAuthErrorLike;
+      if (authErr.code === 'auth/popup-blocked' || authErr.code === 'auth/cancelled-popup-request') {
         try {
           await signInWithRedirect(auth, googleProvider);
-        } catch (redirectErr: any) {
-          setError(redirectErr.message || 'Ошибка авторизации через Google');
+        } catch (redirectErr: unknown) {
+          const rErr = redirectErr as FirebaseAuthErrorLike;
+          setError(rErr.message || 'Ошибка авторизации через Google');
         }
-      } else if (err.code !== 'auth/popup-closed-by-user') {
-        setError(err.message || 'Ошибка авторизации через Google');
+      } else if (authErr.code !== 'auth/popup-closed-by-user') {
+        setError(authErr.message || 'Ошибка авторизации через Google');
       }
     }
   };
 
   const signOut = async () => {
+    if (!CLOUD_SYNC_ENABLED) {
+      setUser(null);
+      return;
+    }
     try {
       await fbSignOut(auth);
-    } catch (err: any) {
-      setError(err.message || 'Ошибка при выходе из аккаунта');
+    } catch (err: unknown) {
+      const authErr = err as FirebaseAuthErrorLike;
+      setError(authErr.message || 'Ошибка при выходе из аккаунта');
     }
   };
 
   const clearError = () => setError(null);
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, signInWithGoogle, signOut, clearError }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      error, 
+      signInWithGoogle, 
+      signOut, 
+      logout: signOut, 
+      clearError,
+      authTimedOut: false,
+      retryAuth: () => {}
+    }}>
       {children}
     </AuthContext.Provider>
   );

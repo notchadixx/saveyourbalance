@@ -81,7 +81,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
   };
 
   const handleSaveEditBalance = (id: string) => {
-    const val = parseFloat(editingBalanceValue);
+    const val = parseFloat(editingBalanceValue.replace(/\s+/g, '').replace(',', '.'));
     if (!isNaN(val)) {
       updateBankAccountBalance(id, val);
     }
@@ -149,10 +149,10 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
             </div>
             <div>
               <h3 className="text-base font-extrabold text-[var(--color-text-main)]">
-                Синхронизация с банками
+                Банковские счета и операции
               </h3>
               <p className="text-[11px] text-[var(--color-text-muted)]">
-                Т-Банк, Сбер, Альфа-Банк, накопительные счета и авто-сверка
+                Учёт карт, сверка балансов и разбор SMS / push-уведомлений вручную
               </p>
             </div>
           </div>
@@ -236,7 +236,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
                 className="py-2 px-3 bg-[#041627] dark:bg-[#10b981] text-white dark:text-[#041627] rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs active:scale-95 transition-all"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isBankSyncing ? 'animate-spin' : ''}`} />
-                <span>{isBankSyncing ? 'Синхронизация...' : 'Обновить всё'}</span>
+                <span>{isBankSyncing ? 'Обновление...' : 'Обновить время сверки'}</span>
               </button>
             </div>
 
@@ -281,8 +281,8 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
                       {editingAccountId === acc.id ? (
                         <div className="flex items-center gap-1.5">
                           <input
-                            type="number"
-                            step="any"
+                            type="text"
+                            inputMode="decimal"
                             value={editingBalanceValue}
                             onChange={(e) => setEditingBalanceValue(e.target.value)}
                             className="w-24 px-2 py-1 bg-[var(--color-bg-card)] border border-[var(--color-accent)] rounded-lg text-xs font-bold text-[var(--color-text-main)] focus:outline-none"
@@ -310,7 +310,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
                               {formatRubles(acc.balance)}
                             </span>
                             <span className="block text-[10px] text-emerald-500 font-medium">
-                              Синхронизировано ✓
+                              Сверен ✓
                             </span>
                           </div>
 
@@ -344,7 +344,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
                 className="w-full py-3 rounded-2xl border border-dashed border-[var(--color-border-strong)] hover:border-[var(--color-accent)] text-[var(--color-text-main)] text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
               >
                 <Plus className="w-4 h-4" />
-                <span>ПОДКЛЮЧИТЬ БАНК / КАРТУ</span>
+                <span>ДОБАВИТЬ СЧЕТ / КАРТУ ВРУЧНУЮ</span>
               </button>
             ) : (
               <form onSubmit={handleCreateBankAccount} className="p-4 rounded-2xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border)] flex flex-col gap-3 animate-in fade-in">
@@ -379,7 +379,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
                     <label className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase block mb-1">Тип счета</label>
                     <select
                       value={newAccountType}
-                      onChange={(e) => setNewAccountType(e.target.value as any)}
+                      onChange={(e) => setNewAccountType(e.target.value as 'checking' | 'savings')}
                       className="w-full text-xs font-semibold p-2 rounded-xl bg-[var(--color-input-bg)] border border-[var(--color-input-border)] text-[var(--color-text-main)]"
                     >
                       <option value="checking">Дебетовая карта / Расчетный</option>
@@ -418,7 +418,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
                   type="submit"
                   className="py-2.5 bg-[#006d37] dark:bg-[#10b981] text-white dark:text-[#041627] rounded-xl text-xs font-bold transition-all shadow-xs"
                 >
-                  Добавить счет в мониторинг
+                  Добавить счет вручную
                 </button>
               </form>
             )}
@@ -435,7 +435,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
                 Как работает автокоррекция баланса:
               </span>
               <p>
-                1. Приложение суммирует доступный остаток на ваших подключенных картах (Т-Банк, Сбер).
+                1. Приложение суммирует указанный баланс на ваших картах (Т-Банк, Сбер).
               </p>
               <p>
                 2. Сравнивает его с формульным остатком <strong>D5 (Чистый остаток на сегодня)</strong> из вашей таблицы бюджета.
@@ -461,7 +461,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
               <textarea
                 value={parserText}
                 onChange={(e) => setParserText(e.target.value)}
-                placeholder="Пример: СберБанк: Покупка 450р Магнит. Баланс 6240р"
+                placeholder="Пример: Покупка 450р Магнит. Баланс 15000р"
                 rows={3}
                 className="w-full text-xs font-medium p-3 rounded-2xl bg-[var(--color-input-bg)] border border-[var(--color-input-border)] text-[var(--color-text-main)] focus:ring-1 focus:ring-[var(--color-accent)] focus:outline-none"
               />
@@ -483,8 +483,8 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({ isOpen, onClose })
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {[
                   'СберБанк: Покупка 850р Перекресток. Баланс 5390р',
-                  'Т-Банк. Оплата 1250.00 ₽, Surf Coffee. Карта •4821',
-                  'Т-Банк: Перевод 2500р от Александра В. Баланс 34500р',
+                  'Т-Банк. Оплата 1250.00 ₽, Кафе. Карта •4821',
+                  'Т-Банк: Перевод 2500р по СБП. Баланс 34500р',
                   'СберБанк: Зачисление 4200р возврат долга. Баланс 18900р',
                 ].map((preset, idx) => (
                   <button

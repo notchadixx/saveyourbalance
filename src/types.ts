@@ -213,7 +213,7 @@ export interface BankTransaction {
   merchant: string;
   amount: number; // always positive for expense
   type: 'expense' | 'income' | 'transfer' | 'interest';
-  categoryType: ExpenseCategory;
+  categoryType: ExpenseCategory | 'зарплата' | 'доход' | 'перевод' | 'проценты';
   categoryName: string;
   date: string; // 'YYYY-MM-DD'
   time: string; // 'HH:mm'
@@ -286,6 +286,7 @@ export interface BudgetState {
   cushionSchedule: CushionMonthPlan[];
   isCushionDepositDoneThisMonth?: boolean; // Были ли совершен взнос в текущем месяце (август 2026)
   actualCushionDepositThisMonth?: number; // Сумма совершенного взноса (8 265.00)
+  isCushionEnabled?: boolean; // Включена ли финансовая подушка безопасности
   cushionNormMode?: 'percent' | 'fixed'; // Способ расчета нормы: процент от з/п или фиксированная сумма
   cushionNormPercent?: number; // Процент нормы (рекомендация: 10%)
   cushionNormFixedAmount?: number; // Фиксированная сумма нормы
@@ -315,6 +316,9 @@ export interface BudgetState {
   userName?: string;
   currency?: string; // 'RUB' | 'USD' | 'EUR'
   includeAdvanceInBudget?: boolean;
+
+  // Onboarding Guided Tour
+  hasSeenOnboardingTour?: boolean;
 
   // View mode
   isMobileFrame: boolean;
@@ -371,11 +375,12 @@ export interface CreditCard {
 export type IncomePattern = 'monthly' | 'biweekly' | 'weekly' | 'irregular';
 export type WorkSchedule = '5_2' | '2_2' | 'shift' | 'flexible' | 'self_employed' | 'unemployed';
 export type IncomeType = 'fixed' | 'fixed_with_variable' | 'variable' | 'irregular';
+export type FinancialProfileType = 'stable' | 'salary_advance' | 'variable' | 'irregular' | 'freelance';
 
 export interface FinancialProfile {
   id: string;
   // Основной профиль, предложенный ИИ
-  profileType: 'stable' | 'salary_advance' | 'variable' | 'irregular' | 'freelance';
+  profileType: FinancialProfileType;
   // Параметры дохода
   mainSalaryDate: number; // день месяца (1-31), когда приходит основная зарплата
   advanceDate?: number; // день месяца для аванса (если есть)
@@ -409,3 +414,10 @@ export interface BudgetState {
 }
 
 export type ActiveTab = 'today' | 'budget' | 'planning' | 'wishlist' | 'cushion' | 'analytics' | 'confirm-expenses';
+
+export interface CushionConfig {
+  isCushionEnabled: boolean;
+  cushionNormMode: 'percent' | 'fixed';
+  cushionNormPercent: number;
+  cushionNormFixedAmount: number;
+}

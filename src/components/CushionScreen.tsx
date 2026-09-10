@@ -16,7 +16,8 @@ import {
   Wallet,
   Sliders,
   Percent,
-  Coins
+  Coins,
+  ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BankSyncModal } from './BankSyncModal';
@@ -36,6 +37,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
     setCushionDepositStatus,
     updateActualCushionDepositThisMonth,
     updateCushionNorm,
+    toggleCushionEnabled,
     updateMandatoryExpense,
     addMandatoryExpense,
     deleteMandatoryExpense,
@@ -45,7 +47,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
 
   // Salary inline edit state
   const [isEditingSalary, setIsEditingSalary] = useState(false);
-  const [salaryInput, setSalaryInput] = useState((state.currentSalary || 82650).toString());
+  const [salaryInput, setSalaryInput] = useState((state.currentSalary || 0).toString());
 
   // Actual deposit for current month inline edit state
   const [isEditingActualDeposit, setIsEditingActualDeposit] = useState(false);
@@ -55,7 +57,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
   const [isConfiguringNorm, setIsConfiguringNorm] = useState(false);
   const currentNormMode = state.cushionNormMode || 'percent';
   const currentNormPercent = state.cushionNormPercent ?? 10;
-  const currentNormFixedAmount = state.cushionNormFixedAmount ?? 8265;
+  const currentNormFixedAmount = state.cushionNormFixedAmount ?? 0;
 
   const [normMode, setNormMode] = useState<'percent' | 'fixed'>(currentNormMode);
   const [normPercentInput, setNormPercentInput] = useState(currentNormPercent.toString());
@@ -65,7 +67,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
   useEffect(() => {
     setNormMode(state.cushionNormMode || 'percent');
     setNormPercentInput((state.cushionNormPercent ?? 10).toString());
-    setNormFixedInput((state.cushionNormFixedAmount ?? 8265).toString());
+    setNormFixedInput((state.cushionNormFixedAmount ?? 0).toString());
   }, [state.cushionNormMode, state.cushionNormPercent, state.cushionNormFixedAmount]);
 
   // Cash on hand inline edit state
@@ -98,7 +100,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
   // Calculated current norm
   const currentMonthlyNorm = useMemo(() => {
     return calculateMonthlyCushionNorm(
-      state.currentSalary || 82650,
+      state.currentSalary || 0,
       currentNormMode,
       currentNormPercent,
       currentNormFixedAmount
@@ -111,7 +113,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
     : currentMonthlyNorm;
 
   const remainingToSave = Math.max(0, targetAmount - totalAccumulatedWithCash);
-  const monthlyPace = currentMonthlyNorm > 0 ? currentMonthlyNorm : 8265;
+  const monthlyPace = currentMonthlyNorm > 0 ? currentMonthlyNorm : 0;
   const monthsToTarget = monthlyPace > 0 ? Math.ceil(remainingToSave / monthlyPace) : Infinity;
 
   // Dynamic calculation of target achievement date based on current date & monthly norm
@@ -151,7 +153,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
   const handleSaveNormSettings = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const percentVal = parseFloat(normPercentInput.replace(/\s+/g, '').replace(',', '.')) || 10;
-    const fixedVal = parseFloat(normFixedInput.replace(/\s+/g, '').replace(',', '.')) || 8265;
+    const fixedVal = parseFloat(normFixedInput.replace(/\s+/g, '').replace(',', '.')) || 0;
     
     updateCushionNorm(normMode, percentVal, fixedVal);
     setIsConfiguringNorm(false);
@@ -160,7 +162,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
   const handleQuickSetPercent = (pct: number) => {
     setNormMode('percent');
     setNormPercentInput(pct.toString());
-    updateCushionNorm('percent', pct, parseFloat(normFixedInput) || 8265);
+    updateCushionNorm('percent', pct, parseFloat(normFixedInput) || 0);
   };
 
   const handleQuickSetFixed = (amount: number) => {
@@ -213,8 +215,71 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
 
   const displayedSchedule = showAllRows ? state.cushionSchedule : state.cushionSchedule.slice(0, 16);
 
+  if (state.isCushionEnabled === false) {
+    return (
+      <div className="flex flex-col gap-4 pb-28 pt-2">
+        <div className="bg-[var(--color-bg-card)] rounded-2xl p-4 shadow-xs border border-[var(--color-border)] flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-400 flex items-center justify-center font-bold shrink-0">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs sm:text-sm font-bold text-[var(--color-text-main)]">
+                Откладывать в финансовую подушку
+              </div>
+              <div className="text-[11px] text-[var(--color-text-muted)]">
+                Формирование резервного фонда отключено
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={false}
+            onClick={() => toggleCushionEnabled(true)}
+            className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-300 dark:bg-slate-700"
+          >
+            <span
+              className="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out translate-x-0"
+            />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 pb-28 pt-2">
+      {/* 0. Primary Cushion Toggle at the very beginning */}
+      <div className="bg-[var(--color-bg-card)] rounded-2xl p-4 shadow-xs border border-[var(--color-border)] flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-[var(--color-accent)]/10 text-[var(--color-accent)] flex items-center justify-center font-bold shrink-0">
+            <ShieldAlert className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs sm:text-sm font-bold text-[var(--color-text-main)]">
+              Откладывать в финансовую подушку
+            </div>
+            <div className="text-[11px] text-[var(--color-text-muted)]">
+              Формирование резервного фонда включено
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          role="switch"
+          aria-checked={true}
+          onClick={() => toggleCushionEnabled(false)}
+          className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-[var(--color-accent)]"
+        >
+          <span
+            className="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out translate-x-5"
+          />
+        </button>
+      </div>
+
       {/* 1. Main Hero Cushion Card */}
       <motion.div 
         initial={{ opacity: 0, y: 6 }}
@@ -366,8 +431,8 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
             {isEditingCash ? (
               <form onSubmit={handleSaveCash} className="flex items-center gap-2 mt-1.5 flex-wrap">
                 <input
-                  type="number"
-                  step="100"
+                  type="text"
+                  inputMode="decimal"
                   value={cashInput}
                   onChange={(e) => setCashInput(e.target.value)}
                   className="w-40 px-3 py-1.5 text-sm font-bold bg-[var(--color-bg-card)] border border-[var(--color-accent)] rounded-lg text-[var(--color-text-main)]"
@@ -508,10 +573,8 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
                     <div className="flex items-center gap-1.5 bg-[var(--color-bg-card)] px-3 py-1.5 border border-[var(--color-border)] rounded-lg">
                       <span className="text-xs text-[var(--color-text-muted)] font-medium">Свой процент:</span>
                       <input
-                        type="number"
-                        step="0.5"
-                        min="1"
-                        max="100"
+                        type="text"
+                        inputMode="decimal"
                         value={normPercentInput}
                         onChange={(e) => setNormPercentInput(e.target.value)}
                         className="w-16 text-xs font-extrabold text-[var(--color-text-main)] bg-transparent outline-hidden"
@@ -525,7 +588,9 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
                       Применить
                     </button>
                     <span className="text-[11px] text-[var(--color-text-muted)]">
-                      = {formatRubles(Math.round((state.currentSalary || 82650) * ((parseFloat(normPercentInput) || 10) / 100)))} в месяц при текущей з/п
+                      {state.currentSalary 
+                        ? `= ${formatRubles(Math.round(state.currentSalary * ((parseFloat(normPercentInput) || 10) / 100)))} в месяц при текущей з/п`
+                        : 'Укажите заработную плату'}
                     </span>
                   </form>
                 </div>
@@ -533,7 +598,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
                 <div className="flex flex-col gap-2.5">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[11px] text-[var(--color-text-muted)] font-medium">Быстрый выбор:</span>
-                    {[3000, 5000, 8265, 10000, 15000].map((amt) => (
+                    {[3000, 5000, 10000, 15000, 20000].map((amt) => (
                       <button
                         key={amt}
                         type="button"
@@ -553,9 +618,8 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
                     <div className="flex items-center gap-1.5 bg-[var(--color-bg-card)] px-3 py-1.5 border border-[var(--color-border)] rounded-lg">
                       <span className="text-xs text-[var(--color-text-muted)] font-medium">Своя сумма:</span>
                       <input
-                        type="number"
-                        step="100"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={normFixedInput}
                         onChange={(e) => setNormFixedInput(e.target.value)}
                         className="w-24 text-xs font-extrabold text-[var(--color-text-main)] bg-transparent outline-hidden"
@@ -589,7 +653,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
               {!isEditingSalary && (
                 <button
                   onClick={() => {
-                    setSalaryInput((state.currentSalary || 82650).toString());
+                    setSalaryInput((state.currentSalary || 0).toString());
                     setIsEditingSalary(true);
                   }}
                   className="text-[11px] font-bold text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 px-2 py-0.5 rounded-lg border border-[var(--color-border)] flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap transition-colors"
@@ -603,8 +667,8 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
             {isEditingSalary ? (
               <form onSubmit={handleSaveSalary} className="flex items-center gap-1.5 w-full min-w-0">
                 <input
-                  type="number"
-                  step="500"
+                  type="text"
+                  inputMode="decimal"
                   value={salaryInput}
                   onChange={(e) => setSalaryInput(e.target.value)}
                   className="flex-1 min-w-0 px-2.5 py-1 text-sm font-bold bg-[var(--color-bg-card)] border border-[var(--color-accent)] rounded-lg text-[var(--color-text-main)] outline-hidden"
@@ -628,7 +692,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
             ) : (
               <div className="flex items-baseline justify-between flex-wrap gap-1.5 min-w-0">
                 <span className="text-xl sm:text-2xl font-black text-[var(--color-text-main)] whitespace-nowrap truncate">
-                  {formatRubles(state.currentSalary || 82650)}
+                  {state.currentSalary ? formatRubles(state.currentSalary) : 'Не указана'}
                 </span>
                 <span className="text-[10.5px] sm:text-xs font-semibold text-[var(--color-accent)] bg-[var(--color-accent-badge-bg)] px-2 py-0.5 rounded-md whitespace-nowrap shrink-0">
                   Норма: {formatRubles(currentMonthlyNorm)} / мес
@@ -648,8 +712,8 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
             {isEditingActualDeposit ? (
               <form onSubmit={handleSaveActualDeposit} className="flex items-center gap-1.5 w-full min-w-0">
                 <input
-                  type="number"
-                  step="100"
+                  type="text"
+                  inputMode="decimal"
                   value={actualDepositInput}
                   onChange={(e) => setActualDepositInput(e.target.value)}
                   placeholder="Сумма, ₽"

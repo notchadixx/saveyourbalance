@@ -11,14 +11,14 @@ import {
   CushionMonthPlan
 } from '../types';
 import { generatePeriodTemplateForMonth } from './periodUtils';
-import { getTodayDateString } from '../mockData';
-import { INITIAL_BUDGET_STATE } from '../mockData';
+import { getTodayDateString, INITIAL_BUDGET_STATE, buildCushionSchedule } from '../mockData';
+import { calculateBudgetNorms } from './normCalculator';
 
 // Вспомогательная функция: генерация дней для заданного периода
 function generateDaysForPeriod(
   startDateStr: string,
   endDateStr: string,
-  normLimit: number = 1859.46
+  normLimit: number = 0
 ): DayRecord[] {
   const days: DayRecord[] = [];
   const start = new Date(startDateStr);
@@ -115,11 +115,43 @@ export function buildInitialStateFromProfile(
   // Расчёт планового бюджета
   const total30DaysBudget = profile.fixedPartAmount || base.total30DaysBudget;
 
-  // Создаём дни для нового периода
+  // Плановые расходы: сохраняем только статьи, настроенные пользователем
+  const plannedItems = existingState?.plannedItems !== undefined 
+    ? existingState.plannedItems 
+    : [];
+
+  const isCushionEnabled = existingState?.isCushionEnabled !== false;
+  const cushionNormMode = existingState?.cushionNormMode || 'percent';
+  const cushionPercent = existingState?.cushionNormPercent ?? 10;
+  const cushionNormFixedAmount = existingState?.cushionNormFixedAmount ?? 0;
+
+  let safetyCushionDeposit = 0;
+  if (isCushionEnabled) {
+    if (existingState?.safetyCushionDeposit !== undefined && existingState.safetyCushionDeposit >= 0) {
+      safetyCushionDeposit = existingState.safetyCushionDeposit;
+    } else if (cushionNormMode === 'fixed') {
+      safetyCushionDeposit = cushionNormFixedAmount;
+    } else {
+      safetyCushionDeposit = Math.round(total30DaysBudget * (cushionPercent / 100));
+    }
+  } else {
+    safetyCushionDeposit = 0;
+  }
+
+  // Вычисляем норму дня по единой формуле: (бюджет - плановые расходы - подушка) / число дней
+  const { dailyNorm } = calculateBudgetNorms({
+    totalBudget: total30DaysBudget,
+    plannedItems: plannedItems,
+    safetyCushionDeposit: safetyCushionDeposit,
+    cushionPercent: isCushionEnabled && cushionNormMode === 'percent' ? cushionPercent : 0,
+    totalDays: template.totalDays,
+  });
+
+  // Создаём дни для нового периода с единой нормой
   const days = generateDaysForPeriod(
     template.startDateStr,
     template.endDateStr,
-    Math.round(total30DaysBudget / template.totalDays)
+    dailyNorm
   );
 
   // Формируем итоговое состояние
@@ -132,18 +164,23 @@ export function buildInitialStateFromProfile(
     salaryDateDay: effectiveSalaryDay,
     advanceDateDay: effectiveAdvanceDay,
     advancePaymentDate: effectiveAdvanceDay ? template.advanceDateStr : '',
-    estimatedAdvanceAmount: effectiveAdvanceDay ? 40000 : 0,
+    estimatedAdvanceAmount: (existingState?.estimatedAdvanceAmount && existingState.estimatedAdvanceAmount !== 40000)
+      ? existingState.estimatedAdvanceAmount
+      : 0,
     isAdvanceReceived: effectiveAdvanceDay ? (today >= template.advanceDateStr) : false,
     includeAdvanceInBudget: !!effectiveAdvanceDay,
     total30DaysBudget: total30DaysBudget,
     previousMonthRemainder: 0,
-    safetyCushionDeposit: Math.round(total30DaysBudget * 0.1),
+    isCushionEnabled: isCushionEnabled,
+    cushionNormMode: cushionNormMode,
+    cushionNormPercent: cushionPercent,
+    cushionNormFixedAmount: cushionNormFixedAmount,
+    safetyCushionDeposit: safetyCushionDeposit,
+    cushionMonthlyContribution: safetyCushionDeposit,
     currentSalary: profile.fixedPartAmount || base.currentSalary,
     days: days,
     // Сохраняем пользовательские настройки из онбординга (кредитные карты, планы, фудконтроль)
-    plannedItems: existingState?.plannedItems && existingState.plannedItems.length > 0 
-      ? existingState.plannedItems 
-      : base.plannedItems,
+    plannedItems: plannedItems,
     wishlist: existingState?.wishlist || base.wishlist,
     bankAccounts: existingState?.bankAccounts || base.bankAccounts,
     pendingBankTransactions: existingState?.pendingBankTransactions || base.pendingBankTransactions,
@@ -153,10 +190,21 @@ export function buildInitialStateFromProfile(
       : (base.creditCards || []),
     foodControl: existingState?.foodControl || base.foodControl,
     mandatoryExpenses: existingState?.mandatoryExpenses || base.mandatoryExpenses,
-    cushionSchedule: existingState?.cushionSchedule || base.cushionSchedule,
+    cushionSchedule: existingState?.cushionSchedule || buildCushionSchedule(
+      total30DaysBudget,
+      false,
+      0.00,
+      existingState?.cushionAccumulated ?? base.cushionAccumulated,
+      template.month,
+      template.year,
+      cushionNormMode,
+      isCushionEnabled ? cushionPercent : 0,
+      isCushionEnabled ? cushionNormFixedAmount : 0
+    ),
     cushionAccumulated: existingState?.cushionAccumulated ?? base.cushionAccumulated,
     cushionTargetAmount: existingState?.cushionTargetAmount ?? base.cushionTargetAmount,
     financialProfile: profile,
+    hasSeenOnboardingTour: existingState?.hasSeenOnboardingTour ?? false,
   };
 
   return newState;

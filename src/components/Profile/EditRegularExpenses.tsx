@@ -67,7 +67,7 @@ export const EditRegularExpenses: React.FC<EditRegularExpensesProps> = ({ onBack
 
     addPlannedItem({
       title: newTitle.trim(),
-      amount: parseFloat(newAmount) || 0,
+      amount: parseFloat(newAmount.replace(/\s+/g, '').replace(',', '.')) || 0,
       category: newCategory,
       isPaid: false,
       type: 'regular',
@@ -90,7 +90,7 @@ export const EditRegularExpenses: React.FC<EditRegularExpensesProps> = ({ onBack
   };
 
   const handleSaveEdit = (id: string) => {
-    const p = parseFloat(editAmount);
+    const p = parseFloat(editAmount.replace(/\s+/g, '').replace(',', '.'));
     if (!isNaN(p) && editTitle.trim()) {
       updatePlannedItem(id, {
         title: editTitle.trim(),
@@ -146,7 +146,7 @@ export const EditRegularExpenses: React.FC<EditRegularExpensesProps> = ({ onBack
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               type="text"
-              placeholder="Название (напр. Интернет Ростелеком)"
+              placeholder="Название (напр. Домашний интернет)"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
               className="px-3 py-2.5 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] text-xs text-[var(--color-text-main)] font-semibold"
@@ -167,7 +167,8 @@ export const EditRegularExpenses: React.FC<EditRegularExpensesProps> = ({ onBack
 
           <div className="grid grid-cols-2 gap-2">
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               placeholder="Сумма (₽)"
               value={newAmount}
               onChange={(e) => setNewAmount(e.target.value)}
@@ -242,7 +243,8 @@ export const EditRegularExpenses: React.FC<EditRegularExpensesProps> = ({ onBack
                             className="flex-1 px-2.5 py-1 rounded-lg bg-[var(--color-bg-card-subtle)] border text-xs font-bold"
                           />
                           <input
-                            type="number"
+                            type="text"
+                            inputMode="decimal"
                             value={editAmount}
                             onChange={(e) => setEditAmount(e.target.value)}
                             className="w-24 px-2.5 py-1 rounded-lg bg-[var(--color-bg-card-subtle)] border text-xs font-bold"

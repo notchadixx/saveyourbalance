@@ -16,7 +16,7 @@ export const ProfileCustomizationStep: React.FC<Props> = () => {
   const mainDay = profile?.mainSalaryDate || 5;
   const advanceDay = profile?.advanceDate || 20;
   const bonusDay = profile?.bonusDateDay || 25;
-  const fixedAmount = profile?.fixedPartAmount || 82650;
+  const fixedAmount = profile?.fixedPartAmount ?? 0;
 
   const updateField = (changes: Partial<NonNullable<typeof profile>>) => {
     if (profile) {
@@ -165,7 +165,8 @@ export const ProfileCustomizationStep: React.FC<Props> = () => {
                 <input
                   type="number"
                   step="1000"
-                  value={fixedAmount}
+                  value={fixedAmount || ''}
+                  placeholder="0"
                   onChange={(e) => updateField({ fixedPartAmount: parseFloat(e.target.value) || 0 })}
                   className="w-full px-3 py-2 text-sm font-semibold rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -264,7 +265,8 @@ export const ProfileCustomizationStep: React.FC<Props> = () => {
                 <input
                   type="number"
                   step="1000"
-                  value={fixedAmount}
+                  value={fixedAmount || ''}
+                  placeholder="0"
                   onChange={(e) => updateField({ fixedPartAmount: parseFloat(e.target.value) || 0 })}
                   className="w-full px-3 py-2 text-sm font-semibold rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />

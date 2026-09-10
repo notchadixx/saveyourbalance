@@ -97,8 +97,8 @@ export const EditBudgetModal: React.FC<EditBudgetModalProps> = ({ isOpen, onClos
             </div>
             <div className="relative">
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 required
                 value={totalBudget}
                 onChange={(e) => setTotalBudget(e.target.value)}
@@ -118,8 +118,8 @@ export const EditBudgetModal: React.FC<EditBudgetModalProps> = ({ isOpen, onClos
                 Зарплата / Доход (₽)
               </label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={salary}
                 onChange={(e) => setSalary(e.target.value)}
                 className="w-full text-sm font-bold text-[var(--color-text-main)] bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
@@ -133,8 +133,8 @@ export const EditBudgetModal: React.FC<EditBudgetModalProps> = ({ isOpen, onClos
                 Остаток прошл. месяца (₽)
               </label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={rollover}
                 onChange={(e) => setRollover(e.target.value)}
                 className="w-full text-sm font-bold text-[var(--color-text-main)] bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
@@ -160,8 +160,8 @@ export const EditBudgetModal: React.FC<EditBudgetModalProps> = ({ isOpen, onClos
             </div>
             <div className="relative">
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={cushionDeposit}
                 onChange={(e) => setCushionDeposit(e.target.value)}
                 className="w-full text-sm font-bold text-[var(--color-text-main)] bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"

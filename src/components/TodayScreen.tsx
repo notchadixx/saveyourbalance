@@ -244,7 +244,7 @@ export const TodayScreen: React.FC<TodayScreenProps> = () => {
             <p className="text-[10px] text-[var(--color-text-muted)] truncate">
               {pendingBankTransactionsCount > 0 
                 ? 'Новые чеки из банков ждут подтверждения' 
-                : 'Синхронизировано с Т-Банком и Сбером'}
+                : 'Баланс счетов актуален'}
             </p>
           </div>
         </div>
@@ -254,7 +254,7 @@ export const TodayScreen: React.FC<TodayScreenProps> = () => {
             onClick={() => syncBankAccounts()}
             disabled={isBankSyncing}
             className="p-1.5 rounded-xl text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] hover:bg-[var(--color-bg-card-subtle)] transition-colors active:scale-95"
-            title="Обновить данные из банков"
+            title="Обновить время сверки счетов"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isBankSyncing ? 'animate-spin text-blue-500' : ''}`} />
           </button>
@@ -269,6 +269,7 @@ export const TodayScreen: React.FC<TodayScreenProps> = () => {
 
       {/* Central Hero Card: Daily Limit (Clickable for Tooltip #1) */}
       <motion.section 
+        id="tour-daily-limit"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         onClick={() => setShowDailyLimitTooltip(true)}
@@ -346,6 +347,7 @@ export const TodayScreen: React.FC<TodayScreenProps> = () => {
 
       {/* Metric Section: Forecast (Clickable for Tooltip #2) */}
       <section 
+        id="tour-forecast-remainder"
         onClick={() => setShowForecastTooltip(true)}
         className="bg-[var(--color-bg-card)] rounded-2xl p-4 shadow-xs border border-[var(--color-border)] hover:border-[var(--color-accent)] flex justify-between items-center cursor-pointer transition-all group select-none relative"
         title="Нажмите для пояснения прогноза остатка"
@@ -390,6 +392,7 @@ export const TodayScreen: React.FC<TodayScreenProps> = () => {
           </h3>
           {!isAddingInline && (
             <button
+              id="tour-add-expense"
               onClick={handleStartAddInline}
               className="text-xs font-bold text-[var(--color-accent-badge-text)] hover:opacity-90 bg-[var(--color-accent-badge-bg)] border border-[var(--color-accent-badge-border)] px-3 py-1.5 rounded-xl flex items-center gap-1 transition-all active:scale-95 touch-manipulation"
             >

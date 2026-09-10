@@ -233,7 +233,7 @@ export const MarketplaceSyncModal: React.FC<MarketplaceSyncModalProps> = ({
               <form onSubmit={handleTopupSubmit} className="pt-2 flex flex-col sm:flex-row gap-2">
                 <select
                   value={topupMarketplace}
-                  onChange={(e) => setTopupMarketplace(e.target.value as any)}
+                  onChange={(e) => setTopupMarketplace(e.target.value as 'wildberries' | 'ozon')}
                   className="h-8 px-2 bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg text-xs font-semibold text-[var(--color-text-main)]"
                 >
                   <option value="wildberries">Wildberries (WB Кошелёк)</option>

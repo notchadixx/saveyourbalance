@@ -213,9 +213,8 @@ export const AddManualIncomeModal: React.FC<AddManualIncomeModalProps> = ({
             </div>
             <div className="relative">
               <input
-                type="number"
-                step="0.01"
-                min="0.01"
+                type="text"
+                inputMode="decimal"
                 required
                 autoFocus
                 value={amount}
@@ -281,7 +280,7 @@ export const AddManualIncomeModal: React.FC<AddManualIncomeModalProps> = ({
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Например: Возврат от Дмитрия, наличные за дизайн"
+              placeholder="Например: Возврат долга, премия, подработка"
               className="w-full text-sm font-semibold text-[var(--color-text-main)] bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
           </div>

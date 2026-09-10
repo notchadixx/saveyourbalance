@@ -59,23 +59,23 @@ export const db: Firestore = dbInstance;
  */
 export function sanitizeForFirestore<T>(data: T): T {
   if (data === null || data === undefined) {
-    return null as any;
+    return null as unknown as T;
   }
   // If it's a Firestore FieldValue or special class instance, return as-is
-  if (typeof data === 'object' && (data as any)?.constructor?.name === 'FieldValue') {
+  if (typeof data === 'object' && 'constructor' in data && data.constructor?.name === 'FieldValue') {
     return data;
   }
   if (data instanceof Date) {
-    return data.toISOString() as any;
+    return data.toISOString() as unknown as T;
   }
   if (Array.isArray(data)) {
     return data
       .filter((item) => item !== undefined)
-      .map((item) => sanitizeForFirestore(item)) as any;
+      .map((item) => sanitizeForFirestore(item)) as unknown as T;
   }
   if (typeof data === 'object') {
-    const clean: Record<string, any> = {};
-    for (const [key, value] of Object.entries(data as Record<string, any>)) {
+    const clean: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
       if (value !== undefined) {
         clean[key] = sanitizeForFirestore(value);
       }
@@ -88,9 +88,9 @@ export function sanitizeForFirestore<T>(data: T): T {
 /**
  * Safe wrapper around setDoc that automatically strips any undefined fields
  */
-export async function safeSetDoc(
+export async function safeSetDoc<T extends Record<string, unknown>>(
   reference: Parameters<typeof setDoc>[0],
-  data: any,
+  data: T,
   options?: Parameters<typeof setDoc>[2]
 ) {
   const sanitized = sanitizeForFirestore(data);

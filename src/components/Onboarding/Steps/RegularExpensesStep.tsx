@@ -66,15 +66,29 @@ export const RegularExpensesStep: React.FC<Props> = ({ onNext }) => {
   const [selectedProviderGuide, setSelectedProviderGuide] = useState<string | null>(null);
 
   useEffect(() => {
-    // Simulate smart analysis run with instant load
-    const timer = setTimeout(() => {
-      const detected = analyzeRegularExpenses();
-      setSuggestions(detected);
-      setSelectedIds(new Set(detected.map(d => d.id)));
-      setIsAnalyzing(false);
-    }, 400);
+    const detected = analyzeRegularExpenses();
+    setSuggestions(detected);
 
-    return () => clearTimeout(timer);
+    if (state.regularExpensesAnalyzed && state.plannedItems && state.plannedItems.length > 0) {
+      // User has already visited this step or configured plans.
+      // Match suggestions with what the user actually kept in state.plannedItems!
+      const plannedTitles = new Set(state.plannedItems.map(p => p.title.toLowerCase().trim()));
+      const selected = new Set<string>();
+      detected.forEach(s => {
+        if (plannedTitles.has(s.title.toLowerCase().trim())) {
+          selected.add(s.id);
+        }
+      });
+      setSelectedIds(selected);
+      setIsAnalyzing(false);
+    } else {
+      // First time entering step: run 350ms analysis animation
+      const timer = setTimeout(() => {
+        setSelectedIds(new Set(detected.map(d => d.id)));
+        setIsAnalyzing(false);
+      }, 350);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
   const dateAdvice = getPaymentDateAdvice();
@@ -112,7 +126,7 @@ export const RegularExpensesStep: React.FC<Props> = ({ onNext }) => {
   };
 
   const handleSaveEdit = (id: string) => {
-    const parsedAmount = parseFloat(editAmount);
+    const parsedAmount = parseFloat(editAmount.replace(/\s+/g, '').replace(',', '.'));
     const parsedDay = parseInt(editDay, 10);
 
     if (!isNaN(parsedAmount) && parsedAmount > 0) {
@@ -164,13 +178,12 @@ export const RegularExpensesStep: React.FC<Props> = ({ onNext }) => {
     return acc + amt;
   }, 0);
 
-  // Sync with budget context when moving forward
+  // Sync with budget context when user modifies selections
   useEffect(() => {
-    // Whenever selected suggestions change, update the budget context prepared plans
-    if (selectedItems.length > 0) {
+    if (!isAnalyzing) {
       applySuggestedPlans(selectedItems);
     }
-  }, [selectedIds, suggestions]);
+  }, [selectedIds, suggestions, isAnalyzing]);
 
   if (isAnalyzing) {
     return (
@@ -351,8 +364,8 @@ export const RegularExpensesStep: React.FC<Props> = ({ onNext }) => {
                 Сумма в месяц (₽)
               </label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 required
                 value={manualAmount}
                 onChange={(e) => setManualAmount(e.target.value)}
@@ -448,7 +461,8 @@ export const RegularExpensesStep: React.FC<Props> = ({ onNext }) => {
                           Сумма (₽)
                         </label>
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="decimal"
                           value={editAmount}
                           onChange={(e) => setEditAmount(e.target.value)}
                           className="w-full text-xs px-2 py-1 rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-bold"

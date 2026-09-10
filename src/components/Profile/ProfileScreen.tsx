@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useBudget, formatRubles } from '../../context/BudgetContext';
 import { useAuth } from '../../context/AuthContext';
 import { useProfile } from '../../context/ProfileContext';
+import { CLOUD_SYNC_ENABLED } from '../../config';
 import { 
   ArrowLeft, 
   X, 
@@ -18,7 +19,8 @@ import {
   Sparkles, 
   ChevronRight, 
   ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  HelpCircle
 } from 'lucide-react';
 import { ProfileGroupItem, ProfileGroupSection } from './ProfileGroup';
 import { EditGeneralSettings } from './EditGeneralSettings';
@@ -50,7 +52,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onClose,
   initialView = 'main'
 }) => {
-  const { state, theme } = useBudget();
+  const { state, theme, setOnboardingTourSeen, setActiveTab } = useBudget();
   const { user, logout } = useAuth();
   const { profile } = useProfile();
 
@@ -199,7 +201,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   icon={<Calendar className="w-4 h-4" />}
                   iconBgColor="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                   title="Финансовый профиль"
-                  subtitle={`Зарплата: ${formatRubles(state.currentSalary || 82650)} • ${state.salaryDateDay}-е число`}
+                  subtitle={state.currentSalary ? `Зарплата: ${formatRubles(state.currentSalary)} • ${state.salaryDateDay}-е число` : `Зарплата не указана • ${state.salaryDateDay}-е число`}
                   value={`${state.salaryDateDay}-е число`}
                   onClick={() => pushView('financial')}
                 />
@@ -262,6 +264,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 />
 
                 <ProfileGroupItem
+                  id="tour-replay"
+                  icon={<HelpCircle className="w-4 h-4" />}
+                  iconBgColor="bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                  title="Обучение и подсказки"
+                  subtitle="Показать подсказки и формулы ещё раз"
+                  onClick={() => {
+                    setOnboardingTourSeen(false);
+                    setActiveTab('today');
+                    onClose();
+                  }}
+                />
+
+                <ProfileGroupItem
                   id="data"
                   icon={<Database className="w-4 h-4" />}
                   iconBgColor="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
@@ -272,7 +287,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               </ProfileGroupSection>
 
               {/* Auth Sign Out Button */}
-              {user && (
+              {CLOUD_SYNC_ENABLED && user && (
                 <button
                   onClick={() => {
                     logout();
@@ -290,7 +305,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
           {/* SUB SCREENS */}
           {currentView === 'general' && (
-            <EditGeneralSettings onBack={popView} showToast={showToast} />
+            <EditGeneralSettings onBack={popView} showToast={showToast} onClose={onClose} />
           )}
 
           {currentView === 'financial' && (

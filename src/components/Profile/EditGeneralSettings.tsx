@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useBudget } from '../../context/BudgetContext';
 import { useAuth } from '../../context/AuthContext';
-import { User, DollarSign, Sun, Moon, Check, Sparkles } from 'lucide-react';
+import { User, DollarSign, Sun, Moon, Check, Sparkles, HelpCircle } from 'lucide-react';
 
 interface EditGeneralSettingsProps {
   onBack: () => void;
   showToast: (msg: string) => void;
+  onClose?: () => void;
 }
 
-export const EditGeneralSettings: React.FC<EditGeneralSettingsProps> = ({ onBack, showToast }) => {
-  const { state, updateUserProfile, theme, setTheme } = useBudget();
+export const EditGeneralSettings: React.FC<EditGeneralSettingsProps> = ({ onBack, showToast, onClose }) => {
+  const { state, updateUserProfile, theme, setTheme, setOnboardingTourSeen, setActiveTab } = useBudget();
   const { user } = useAuth();
 
   const [name, setName] = useState(state.userName || user?.displayName || '');
@@ -139,6 +140,32 @@ export const EditGeneralSettings: React.FC<EditGeneralSettingsProps> = ({ onBack
             <span className="text-xs">Тёмная</span>
           </button>
         </div>
+      </div>
+
+      {/* Replay Onboarding Tour */}
+      <div className="bg-[var(--color-bg-card)] rounded-2xl p-4 border border-[var(--color-border)] shadow-xs space-y-2.5">
+        <label className="block text-xs font-bold text-[var(--color-text-muted)] uppercase">
+          Обучение и подсказки
+        </label>
+        <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+          Запустить интерактивную экскурсию по ключевым показателям и формулам бюджета с вашими актуальными цифрами на сегодня.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setOnboardingTourSeen(false);
+            setActiveTab('today');
+            if (onClose) {
+              onClose();
+            } else {
+              onBack();
+            }
+          }}
+          className="w-full py-2.5 px-4 rounded-xl border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-98"
+        >
+          <HelpCircle className="w-4 h-4" />
+          <span>Показать подсказки ещё раз</span>
+        </button>
       </div>
 
       {/* Save Button */}

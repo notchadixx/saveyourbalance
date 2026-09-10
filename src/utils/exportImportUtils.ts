@@ -112,25 +112,27 @@ export function exportBudgetDataAsCSV(state: BudgetState): void {
 /**
  * Валидирует и восстанавливает импортированные данные
  */
-export function validateImportedBudgetData(rawData: any): ImportValidationResult {
+export function validateImportedBudgetData(rawData: unknown): ImportValidationResult {
   if (!rawData || typeof rawData !== 'object') {
     return { isValid: false, error: 'Файл не содержит корректного JSON-объекта.' };
   }
 
-  // Если файл завернут в структуру ExportPayload или является чистым BudgetState
-  let candidateState: any = null;
-  let candidateProfile: any = null;
+  const rawObj = rawData as Record<string, unknown>;
 
-  if (rawData.state && typeof rawData.state === 'object') {
-    candidateState = rawData.state;
-    candidateProfile = rawData.profile || candidateState.financialProfile || null;
+  // Если файл завернут в структуру ExportPayload или является чистым BudgetState
+  let candidateState: (Record<string, unknown> & Partial<BudgetState>) | null = null;
+  let candidateProfile: FinancialProfile | null = null;
+
+  if (rawObj.state && typeof rawObj.state === 'object') {
+    candidateState = rawObj.state as Record<string, unknown> & Partial<BudgetState>;
+    candidateProfile = (rawObj.profile || candidateState.financialProfile || null) as FinancialProfile | null;
   } else {
-    candidateState = rawData;
-    candidateProfile = rawData.financialProfile || null;
+    candidateState = rawObj as Record<string, unknown> & Partial<BudgetState>;
+    candidateProfile = (rawObj.financialProfile || null) as FinancialProfile | null;
   }
 
   // Проверка ключевых полей
-  if (!Array.isArray(candidateState.days)) {
+  if (!candidateState || !Array.isArray(candidateState.days)) {
     return { isValid: false, error: 'Некорректная структура данных: отсутствует массив дней (days).' };
   }
 
@@ -148,8 +150,8 @@ export function validateImportedBudgetData(rawData: any): ImportValidationResult
     creditCards: Array.isArray(candidateState.creditCards) ? candidateState.creditCards : (INITIAL_BUDGET_STATE.creditCards || []),
     incomes: Array.isArray(candidateState.incomes) ? candidateState.incomes : (INITIAL_BUDGET_STATE.incomes || []),
     wishlist: Array.isArray(candidateState.wishlist) ? candidateState.wishlist : INITIAL_BUDGET_STATE.wishlist,
-    foodControl: candidateState.foodControl || INITIAL_BUDGET_STATE.foodControl,
-    financialProfile: candidateProfile || candidateState.financialProfile,
+    foodControl: (candidateState.foodControl as BudgetState['foodControl']) || INITIAL_BUDGET_STATE.foodControl,
+    financialProfile: candidateProfile || (candidateState.financialProfile as FinancialProfile | undefined),
   };
 
   return {

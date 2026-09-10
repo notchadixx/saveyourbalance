@@ -65,8 +65,8 @@ export const FoodBasketModal: React.FC<FoodBasketModalProps> = ({
 
   const handleSaveManualItem = (e: React.FormEvent) => {
     e.preventDefault();
-    const priceNum = parseFloat(manualPrice.replace(',', '.'));
-    const qtyNum = parseFloat(manualQty.replace(',', '.'));
+    const priceNum = parseFloat(manualPrice.replace(/\s+/g, '').replace(',', '.'));
+    const qtyNum = parseFloat(manualQty.replace(/\s+/g, '').replace(',', '.'));
 
     if (!manualName.trim() || isNaN(priceNum) || priceNum <= 0) return;
 
@@ -85,7 +85,7 @@ export const FoodBasketModal: React.FC<FoodBasketModalProps> = ({
   };
 
   const handleSaveLimit = () => {
-    const num = parseFloat(limitInput.replace(',', '.'));
+    const num = parseFloat(limitInput.replace(/\s+/g, '').replace(',', '.'));
     if (!isNaN(num) && num > 0) {
       updateFoodLimit(num);
     }
@@ -241,7 +241,8 @@ export const FoodBasketModal: React.FC<FoodBasketModalProps> = ({
                     </label>
                     <div className="flex gap-2">
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={limitInput}
                         onChange={(e) => setLimitInput(e.target.value)}
                         onBlur={handleSaveLimit}
@@ -320,7 +321,7 @@ export const FoodBasketModal: React.FC<FoodBasketModalProps> = ({
                         <label className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase block mb-1">Категория</label>
                         <select
                           value={manualCategory}
-                          onChange={(e) => setManualCategory(e.target.value as any)}
+                          onChange={(e) => setManualCategory(e.target.value as FoodItem['category'])}
                           className="w-full px-2 py-1.5 bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg text-xs font-medium text-[var(--color-text-main)]"
                         >
                           <option value="молочка">🥛 Молочка</option>
@@ -338,7 +339,8 @@ export const FoodBasketModal: React.FC<FoodBasketModalProps> = ({
                       <div>
                         <label className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase block mb-1">Цена за ед. (₽)</label>
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="decimal"
                           placeholder="95"
                           value={manualPrice}
                           onChange={(e) => setManualPrice(e.target.value)}
@@ -349,8 +351,8 @@ export const FoodBasketModal: React.FC<FoodBasketModalProps> = ({
                       <div>
                         <label className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase block mb-1">Кол-во в месяц</label>
                         <input
-                          type="number"
-                          step="0.5"
+                          type="text"
+                          inputMode="decimal"
                           value={manualQty}
                           onChange={(e) => setManualQty(e.target.value)}
                           className="w-full px-2.5 py-1.5 bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg text-xs font-bold text-[var(--color-text-main)] focus:outline-hidden"

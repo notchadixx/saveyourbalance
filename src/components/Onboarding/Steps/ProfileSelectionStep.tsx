@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useProfile } from '../../../context/ProfileContext';
 import { Check, ShieldCheck, CreditCard, Sparkles, CalendarClock, Briefcase } from 'lucide-react';
+import { FinancialProfileType } from '../../../types';
 
 interface Props {
   onNext: () => void;
@@ -9,11 +10,20 @@ interface Props {
   isLast: boolean;
 }
 
+interface ProfileOption {
+  id: FinancialProfileType;
+  label: string;
+  desc: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: string;
+  subtext?: string;
+}
+
 export const ProfileSelectionStep: React.FC<Props> = () => {
   const { profile, setProfile } = useProfile();
-  const [selected, setSelected] = useState(profile?.profileType || 'salary_advance');
+  const [selected, setSelected] = useState<FinancialProfileType>(profile?.profileType || 'salary_advance');
 
-  const profiles = [
+  const profiles: ProfileOption[] = [
     { 
       id: 'salary_advance', 
       label: 'Зарплата + аванс', 
@@ -48,10 +58,10 @@ export const ProfileSelectionStep: React.FC<Props> = () => {
     },
   ];
 
-  const handleSelect = (id: string) => {
-    setSelected(id as any);
+  const handleSelect = (id: FinancialProfileType) => {
+    setSelected(id);
     if (profile) {
-      setProfile({ ...profile, profileType: id as any });
+      setProfile({ ...profile, profileType: id });
     }
   };
 
