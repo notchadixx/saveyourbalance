@@ -227,7 +227,7 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider flex items-center gap-1.5">
                 <CreditCard className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                СЕЙЧАС НА КАРТЕ
+                БАЛАНС НА СТАРТЕ
               </span>
               {hasCardBalance && (
                 <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/50 px-2 py-0.5 rounded-full">
@@ -330,8 +330,8 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
 
         {/* Budget details breakdown: 5-column grid including Salary and Advance counters */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 py-2.5 px-3 mb-3 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] text-xs">
-          <div>
-            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">Зарплата</span>
+          <div className="min-w-0">
+            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium truncate">Зарплата</span>
             <span className="font-bold text-[var(--color-text-main)] truncate block">
               {formatRubles(state.currentSalary, { showCents: false })}
             </span>
@@ -340,8 +340,8 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
             </span>
           </div>
 
-          <div>
-            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">
+          <div className="min-w-0">
+            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium truncate">
               {isAdvanceDateReached ? 'Фактический аванс' : 'Прогнозируемый аванс'}
             </span>
             <span className={`font-bold truncate block ${isAdvanceDateReached ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-400'}`}>
@@ -352,8 +352,8 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
             </span>
           </div>
 
-          <div>
-            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">
+          <div className="min-w-0">
+            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium truncate">
               Подушка
             </span>
             <span className="font-bold text-[var(--color-text-main)] truncate block">
@@ -364,8 +364,8 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
             </span>
           </div>
 
-          <div>
-            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">Остаток планов</span>
+          <div className="min-w-0">
+            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium truncate">Остаток планов</span>
             <span className="font-bold text-[var(--color-text-main)] truncate block">
               {formatRubles(unreachedPlannedExpenses, { showCents: false })}
             </span>
@@ -374,8 +374,8 @@ export const BudgetScreen: React.FC<BudgetScreenProps> = () => {
             </span>
           </div>
 
-          <div>
-            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium">Доп. доходы</span>
+          <div className="min-w-0">
+            <span className="text-[10px] text-[var(--color-text-muted)] block font-medium truncate">Доп. доходы</span>
             <span className="font-bold text-emerald-600 dark:text-emerald-400 truncate block">
               +{formatRubles(totalIncludedAdditionalIncomes, { showCents: false })}
             </span>

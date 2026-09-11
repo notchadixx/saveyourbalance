@@ -665,15 +665,16 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
             </div>
 
             {isEditingSalary ? (
-              <form onSubmit={handleSaveSalary} className="flex items-center gap-1.5 w-full min-w-0">
+              <form onSubmit={handleSaveSalary} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 w-full min-w-0">
                 <input
                   type="text"
                   inputMode="decimal"
                   value={salaryInput}
                   onChange={(e) => setSalaryInput(e.target.value)}
-                  className="flex-1 min-w-0 px-2.5 py-1 text-sm font-bold bg-[var(--color-bg-card)] border border-[var(--color-accent)] rounded-lg text-[var(--color-text-main)] outline-hidden"
+                  className="flex-1 min-w-0 w-full px-2.5 py-1.5 text-sm font-bold bg-[var(--color-bg-card)] border border-[var(--color-accent)] rounded-lg text-[var(--color-text-main)] outline-hidden"
                   autoFocus
                 />
+                <div className="flex items-center gap-1.5 justify-end shrink-0">
                 <button 
                   type="submit" 
                   className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1 shadow-xs transition-colors shrink-0"
@@ -688,6 +689,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
+                </div>
               </form>
             ) : (
               <div className="flex items-baseline justify-between flex-wrap gap-1.5 min-w-0">
@@ -705,21 +707,26 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
           <div className="p-3.5 sm:p-4 rounded-xl bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)] flex flex-col justify-between gap-2.5 min-w-0 overflow-hidden">
             <div className="flex items-center justify-between gap-1.5 min-w-0">
               <span className="text-[10.5px] sm:text-[11px] text-[var(--color-text-muted)] font-bold uppercase tracking-tight whitespace-nowrap truncate">
-                Взнос за текущий месяц (Август)
+                Взнос за текущий месяц ({(() => {
+                  const d = state.todayDate ? new Date(state.todayDate) : new Date();
+                  const name = d.toLocaleDateString('ru-RU', { month: 'long' });
+                  return name.charAt(0).toUpperCase() + name.slice(1);
+                })()})
               </span>
             </div>
 
             {isEditingActualDeposit ? (
-              <form onSubmit={handleSaveActualDeposit} className="flex items-center gap-1.5 w-full min-w-0">
+              <form onSubmit={handleSaveActualDeposit} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 w-full min-w-0">
                 <input
                   type="text"
                   inputMode="decimal"
                   value={actualDepositInput}
                   onChange={(e) => setActualDepositInput(e.target.value)}
                   placeholder="Сумма, ₽"
-                  className="flex-1 min-w-0 px-2.5 py-1 text-sm font-bold bg-[var(--color-bg-card)] border border-[var(--color-accent)] rounded-lg text-[var(--color-text-main)] outline-hidden"
+                  className="flex-1 min-w-0 w-full px-2.5 py-1.5 text-sm font-bold bg-[var(--color-bg-card)] border border-[var(--color-accent)] rounded-lg text-[var(--color-text-main)] outline-hidden"
                   autoFocus
                 />
+                <div className="flex items-center gap-1.5 justify-end shrink-0">
                 <button 
                   type="submit" 
                   className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1 shadow-xs transition-colors shrink-0"
@@ -734,6 +741,7 @@ export const CushionScreen: React.FC<CushionScreenProps> = () => {
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
+                </div>
               </form>
             ) : (
               <div className="flex flex-col gap-2 min-w-0">
