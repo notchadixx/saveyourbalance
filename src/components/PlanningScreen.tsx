@@ -45,8 +45,10 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
     movePlannedToWishlist,
     transferPlannedItemPeriod,
     togglePlannedItemAutoRenew,
-    freeDiscretionaryBudget,
-    baseDailyNorm
+    baseDailyNorm,
+    totalFundsWithAdvance,
+    totalCheckingBankBalance,
+    realDiscretionaryRemainder
   } = useBudget();
 
   const [activePeriodTab, setActivePeriodTab] = useState<'current' | 'next' | 'future' | 'previous' | 'all'>('current');
@@ -227,19 +229,19 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
         className="bg-[var(--color-bg-card)] rounded-2xl p-5 shadow-xs border border-[var(--color-border)]"
       >
         <span className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1">
-          Планирование бюджета на 30 дней ({state.periodTitle})
+          Планирование бюджета до конца периода {state.periodTitle}
         </span>
         <div className="text-3xl font-extrabold text-[var(--color-text-main)] tracking-tight mb-4">
-          {formatRubles(state.total30DaysBudget, { showCents: true })}
+          {formatRubles(totalFundsWithAdvance, { showCents: true })}
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pt-3 border-t border-[var(--color-border)]">
           <div className="bg-[var(--color-bg-card-subtle)] p-2.5 rounded-xl border border-[var(--color-border-subtle)] flex flex-col justify-center min-w-0 overflow-hidden">
             <span className="text-[9.5px] sm:text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-tight whitespace-nowrap truncate block">
-              С прошлого месяца
+              Баланс карты
             </span>
             <span className="text-xs sm:text-sm font-extrabold text-[var(--color-text-main)] whitespace-nowrap truncate block mt-0.5">
-              {formatRubles(state.previousMonthRemainder)}
+              {formatRubles(totalCheckingBankBalance)}
             </span>
           </div>
 
@@ -257,7 +259,7 @@ export const PlanningScreen: React.FC<PlanningScreenProps> = ({ onOpenAddPlanned
               Итого на прочее
             </span>
             <span className="text-xs sm:text-sm font-black text-[var(--color-accent)] whitespace-nowrap truncate block mt-0.5">
-              {formatRubles(freeDiscretionaryBudget)}
+              {formatRubles(realDiscretionaryRemainder)}
             </span>
           </div>
 
