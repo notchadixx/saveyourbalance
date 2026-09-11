@@ -164,7 +164,10 @@ export function buildInitialStateFromProfile(
     salaryDateDay: effectiveSalaryDay,
     advanceDateDay: effectiveAdvanceDay,
     advancePaymentDate: effectiveAdvanceDay ? template.advanceDateStr : '',
-    estimatedAdvanceAmount: (existingState?.estimatedAdvanceAmount && existingState.estimatedAdvanceAmount !== 40000)
+    // Раньше здесь была проверка "!== 40000" — костыль под старую зашитую
+    // заглушку. Теперь дефолт сам по себе 0, поэтому просто проверяем, что
+    // значение реально задано и больше нуля.
+    estimatedAdvanceAmount: (existingState?.estimatedAdvanceAmount && existingState.estimatedAdvanceAmount > 0)
       ? existingState.estimatedAdvanceAmount
       : 0,
     isAdvanceReceived: effectiveAdvanceDay ? (today >= template.advanceDateStr) : false,
@@ -205,6 +208,10 @@ export function buildInitialStateFromProfile(
     cushionTargetAmount: existingState?.cushionTargetAmount ?? base.cushionTargetAmount,
     financialProfile: profile,
     hasSeenOnboardingTour: existingState?.hasSeenOnboardingTour ?? false,
+    // Первый период после онбординга — сверка баланса карты с "теоретической"
+    // моделью ещё не имеет смысла (до установки приложения дни не велись),
+    // поэтому явно помечаем период как первый отслеживаемый.
+    isFirstTrackedPeriod: existingState?.isFirstTrackedPeriod ?? true,
   };
 
   return newState;
