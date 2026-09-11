@@ -481,10 +481,18 @@ export function migrateStateToNewPeriod(
   const salaryDay = currentState.salaryDateDay || 5;
   const advanceDay = currentState.advanceDateDay || 20;
 
+  // Раньше здесь были зашиты "2026, 9" (сентябрь 2026) буквально — после того,
+  // как реальная дата уходила за пределы сентября 2026, любой переход периода
+  // через эту функцию заново "откатывал" период на сентябрь. Теперь год и
+  // месяц вычисляются из фактической сегодняшней даты (actualToday).
+  const todayParts = actualToday.split('-');
+  const todayYear = parseInt(todayParts[0], 10) || 2026;
+  const todayMonth = parseInt(todayParts[1], 10) || 9;
+
   // Determine current period template
   const newTemplate = generatePeriodTemplateForMonth(
-    2026, 
-    9, 
+    todayYear, 
+    todayMonth, 
     salaryDay, 
     advanceDay, 
     actualToday
@@ -606,13 +614,16 @@ export function migrateStateToNewPeriod(
   const combinedDays = Array.from(existingDaysMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 
   // 5. Cushion Schedule fresh start
+  const newTemplateParts = newStartDate.split('-');
+  const newTemplateYear = parseInt(newTemplateParts[0], 10) || todayYear;
+  const newTemplateMonth = parseInt(newTemplateParts[1], 10) || todayMonth;
   const freshCushionSchedule = buildCushionSchedule(
     newSalary,
     false,
     0.00,
     currentState.cushionAccumulated || 0,
-    9,
-    2026,
+    newTemplateMonth,
+    newTemplateYear,
     currentState.cushionNormMode || 'percent',
     currentState.cushionNormPercent ?? 10,
     currentState.cushionNormFixedAmount ?? 0
@@ -637,6 +648,11 @@ export function migrateStateToNewPeriod(
     cushionSchedule: freshCushionSchedule,
     plannedItems: updatedPlannedItems,
     days: combinedDays,
+    // Это уже настоящий переход периода внутри приложения (а не первый запуск
+    // после онбординга) — значит, начиная с этого периода сверка баланса
+    // карты с моделью снова имеет смысл, и предупреждение "Корректировка"
+    // может показываться как обычно.
+    isFirstTrackedPeriod: false,
   };
 }
 
@@ -742,7 +758,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('today');
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDateString());
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('2026-08');
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
   const [isMobileFrame, setIsMobileFrame] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth > 768;
@@ -929,7 +945,13 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const refDate = state.todayDate || getTodayDateString();
     const found = findPeriodTemplateForDate(refDate, rollingPeriods);
     if (found) return found;
-    return generatePeriodTemplateForMonth(2026, 9, state.salaryDateDay || 5, state.advanceDateDay || 20, refDate);
+    // Запасной вариант больше не зашивает "сентябрь 2026" — берёт год/месяц
+    // из реальной сегодняшней даты, если по какой-то причине refDate не
+    // попал ни в один из сгенерированных периодов.
+    const refParts = refDate.split('-');
+    const refYear = parseInt(refParts[0], 10) || 2026;
+    const refMonth = parseInt(refParts[1], 10) || 9;
+    return generatePeriodTemplateForMonth(refYear, refMonth, state.salaryDateDay || 5, state.advanceDateDay || 20, refDate);
   }, [state.todayDate, state.salaryDateDay, state.advanceDateDay, rollingPeriods]);
 
   // 2.5 Unreached planned expenses, card balance check, and real discretionary remainder
@@ -1018,12 +1040,21 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Advance amount: estimated before date arrives, actual once reached
   const effectiveAdvanceAmount = useMemo(() => {
-    const estimatedAdv = state.estimatedAdvanceAmount || 40000;
+    // Раньше здесь была зашита фиксированная заглушка 40000 ₽, которая
+    // всплывала в онбординге у КАЖДОГО пользователя независимо от его
+    // реальной зарплаты (и возвращалась даже после того, как
+    // estimatedAdvanceAmount стал 0 по умолчанию, потому что "0 || 40000"
+    // в JS даёт 40000). Теперь при отсутствии введённой пользователем
+    // оценки считаем по проценту от зарплаты — это даёт более осмысленную
+    // оценку, а не одно и то же число для всех.
+    const estimatedAdv = state.estimatedAdvanceAmount && state.estimatedAdvanceAmount > 0
+      ? state.estimatedAdvanceAmount
+      : Math.round((state.currentSalary || 0) * ((state.estimatedAdvanceSharePercent ?? 38.27) / 100));
     if (isAdvanceDateReached) {
       return state.actualAdvanceAmount || estimatedAdv;
     }
     return estimatedAdv;
-  }, [isAdvanceDateReached, state.actualAdvanceAmount, state.estimatedAdvanceAmount]);
+  }, [isAdvanceDateReached, state.actualAdvanceAmount, state.estimatedAdvanceAmount, state.currentSalary, state.estimatedAdvanceSharePercent]);
 
   // Total funds until period end:
   // If before advance: card balance + estimated advance
@@ -1252,6 +1283,14 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // a) До аванса: Корректировка = Чистый текущий остаток - (текущий баланс по карте + предполагаемый аванс - планируемые нереализованные расходы)
   // b) После аванса: Корректировка = Чистый текущий остаток - (текущий баланс по карте - планируемые нереализованные расходы)
   const calculatedBudgetCorrection = useMemo(() => {
+    // В первый период после установки приложения сравнивать "теоретическую"
+    // модель с реальным балансом карты не с чем — дни до установки никто не
+    // отслеживал, поэтому любое "расхождение" в этот момент бессмысленно и
+    // будет пугать пользователя без причины. Баланс карты на момент
+    // онбординга принимается как точка отсчёта без сверки.
+    if (state.isFirstTrackedPeriod) {
+      return 0;
+    }
     const adv = effectiveAdvanceAmount;
     if (!isAdvanceDateReached) {
       return cleanRemainderToday - (totalCheckingBankBalance + adv - unreachedPlannedExpenses);
@@ -1259,6 +1298,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return cleanRemainderToday - (totalCheckingBankBalance - unreachedPlannedExpenses);
     }
   }, [
+    state.isFirstTrackedPeriod,
     isAdvanceDateReached,
     cleanRemainderToday,
     totalCheckingBankBalance,
@@ -1278,6 +1318,18 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const activeViewingPeriod = useMemo(() => {
     return rollingPeriods.find(p => p.id === selectedPeriodId) || currentPeriodTemplate;
   }, [rollingPeriods, selectedPeriodId, currentPeriodTemplate]);
+
+  // Раньше selectedPeriodId навсегда оставался на жёстко заданном '2026-08' —
+  // все экраны, использующие activeViewingPeriod (включая "Анализ"), были
+  // привязаны к августу 2026 и не переключались сами при смене периода.
+  // Теперь при каждом реальном переходе в новый период (когда меняется
+  // currentPeriodTemplate.id) выбранный период синхронизируется автоматически.
+  // Если пользователь сам выбрал другой период через выпадающий список,
+  // currentPeriodTemplate.id при этом не меняется — эффект не перезатирает
+  // его ручной выбор.
+  useEffect(() => {
+    setSelectedPeriodId(currentPeriodTemplate.id);
+  }, [currentPeriodTemplate.id]);
 
   const setPeriodByTemplate = (periodId: string) => {
     setSelectedPeriodId(periodId);
@@ -2752,7 +2804,25 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return true;
       });
 
-      const retainedTitles = new Set(retainedPlans.map(p => p.title.toLowerCase().trim()));
+      // Раньше статья, совпавшая по названию с уже сохранённой, просто
+      // "засчитывалась как есть" и пропускалась — из-за этого правки суммы
+      // или дня платежа, сделанные пользователем на экране онбординга,
+      // никогда не долетали до сохранённого плана. Теперь уже сохранённая
+      // статья ОБНОВЛЯЕТСЯ актуальными значениями из suggestions, а не
+      // просто подтверждается как "уже есть".
+      const updatedRetained = retainedPlans.map(item => {
+        const t = item.title.toLowerCase().trim();
+        const match = suggestions.find(s => s.title.toLowerCase().trim() === t);
+        if (!match) return item;
+        const finalAmount = match.isFixed ? match.amount : (match.predictedAmount || match.amount);
+        return {
+          ...item,
+          amount: finalAmount,
+          typicalDay: match.typicalDay,
+        };
+      });
+
+      const retainedTitles = new Set(updatedRetained.map(p => p.title.toLowerCase().trim()));
       const newPlans: PlannedItem[] = [];
 
       suggestions.forEach(s => {
@@ -2783,7 +2853,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       return {
         ...prev,
-        plannedItems: [...retainedPlans, ...newPlans],
+        plannedItems: [...updatedRetained, ...newPlans],
         regularExpensesAnalyzed: true,
       };
     });
