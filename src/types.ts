@@ -251,6 +251,7 @@ export interface BudgetState {
   advanceDateDay: number; // 20 (20th of month)
   advancePaymentDate: string; // "2026-08-20"
   estimatedAdvanceAmount: number; // 40 000.00 (estimated advance payment)
+  estimatedAdvanceSharePercent?: number; // доля аванса от зарплаты в %, редактируется пользователем вручную (например 38.27)
   isAdvanceReceived?: boolean; // Получен ли уже аванс в текущем периоде
   isSalaryReceived?: boolean; // Получена ли уже зарплата в текущем периоде
   salaryReceivedDate?: string; // Дата фактического поступления зарплаты
@@ -264,6 +265,7 @@ export interface BudgetState {
   
   // Balance sync state
   isBalanceSynced?: boolean;
+  isFirstTrackedPeriod?: boolean; // true от онбординга до первого реального перехода периода внутри приложения — на это время сверка баланса (Корректировка) не показывается, сравнивать не с чем
   lastBalanceSyncDate?: string;
   
   // Planned items

@@ -668,7 +668,7 @@ export const INITIAL_BUDGET_STATE: BudgetState = {
   salaryDateDay: 5,
   advanceDateDay: 20,
   advancePaymentDate: '2026-09-18',
-  estimatedAdvanceAmount: 40000.00, // Предполагаемый аванс 20-го числа
+  estimatedAdvanceAmount: 0.00, // Оценка аванса — теперь нейтральная, а не зашитая заглушка
   isAdvanceReceived: false,
   isSalaryReceived: false,
   
@@ -678,13 +678,14 @@ export const INITIAL_BUDGET_STATE: BudgetState = {
   currentSalary: 80000.00,
   
   isBalanceSynced: false,
+  isFirstTrackedPeriod: true,
   
   plannedItems: INITIAL_PLANNED_ITEMS,
   days: buildInitialDays(),
   wishlist: INITIAL_WISHLIST,
   
-  cushionAccumulated: 10000.00,
-  cushionCash: 15000.00, // Учет наличных сбережений
+  cushionAccumulated: 0.00,
+  cushionCash: 0.00, // Учет наличных сбережений
   cushionTargetAmount: 150000.00, // 3 месяца
   cushionTargetMonthsCount: 3,
   cushionMonthlyContribution: 8000.00,
@@ -695,7 +696,7 @@ export const INITIAL_BUDGET_STATE: BudgetState = {
   cushionNormMode: 'percent',
   cushionNormPercent: 10,
   cushionNormFixedAmount: 8000.00,
-  cushionSchedule: buildCushionSchedule(80000.00, false, 0.00, 10000.00, 9, 2026, 'percent', 10, 8000.00),
+  cushionSchedule: buildCushionSchedule(80000.00, false, 0.00, 0.00, 9, 2026, 'percent', 10, 8000.00),
   
   // Banking integration data
   bankAccounts: INITIAL_BANK_ACCOUNTS,
